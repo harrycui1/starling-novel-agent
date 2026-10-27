@@ -19,9 +19,19 @@ def test_editor_workflow_and_recovery(tmp_path, monkeypatch):
     original_complete = gateway.complete
     fail_patch_once = [True]
     bad_digest_once = [True]
+    bad_plan_once = [True]
+    bad_judge_once = [True]
+    calls = []
 
     async def complete(name, inputs, messages, project_id, version_id=None):
-        if name == "n1_chapter_digest" and bad_digest_once[0]:
+        calls.append((name, inputs, messages))
+        if name == "n5_chapter_plan" and bad_plan_once[0]:
+            bad_plan_once[0] = False
+            return '{"plans":[]}'
+        if name == "n3_judge" and bad_judge_once[0]:
+            bad_judge_once[0] = False
+            return '{"judgments":[]}'
+        if name == "n1_bible_extract" and bad_digest_once[0]:
             bad_digest_once[0] = False
             return '{"chapter":"invalid"}'
         if name == "n6_bible_update" and fail_patch_once[0]:
@@ -86,6 +96,18 @@ def test_editor_workflow_and_recovery(tmp_path, monkeypatch):
         actions = client.get(f"/api/versions/{vid}").json()["actions"]
         assert {"direction_select", "outline_edit", "outline_confirm", "chapter_edit", "version_submit"} <= {a["action"] for a in actions}
         manual = send(f"/projects/{pid}/versions", {"source":"manual", "manual_text":"核对账册，让真相公开", "target_words":1000}, code=201)
-        wait(f"/versions/{manual['id']}", "version", "awaiting_direction_confirmation")
+        normalized = wait(f"/versions/{manual['id']}", "version", "awaiting_direction_confirmation")
+        edited_direction = {**normalized["version"]["direction"], "hook": "编辑修改后的卖点"}
+        send(f"/versions/{manual['id']}/direction", {"direction": edited_direction}, method="PUT")
+        assert client.get(f"/api/versions/{manual['id']}").json()["version"]["direction"]["hook"] == "编辑修改后的卖点"
         send(f"/versions/{manual['id']}/direction/confirm", code=202)
         wait(f"/versions/{manual['id']}", "version", "awaiting_outline")
+
+        names = [name for name, _, _ in calls]
+        assert "n1_chapter_digest" not in names and "n1_foreshadows" not in names
+        assert names.count("n1_bible_extract") == 2  # one malformed result, then one combined read
+        assert names.count("n3_judge") == 2  # one invalid batch, then one batch for all candidates
+        assert names.count("n5_chapter_plan") == 2  # coverage errors feed back into structured retry
+        manual_inputs = next(inputs for name, inputs, _ in calls if name == "n3_manual")
+        assert edited_direction["main_trope"] in manual_inputs["trope_vocab"]
+        assert all(s["target_words"] > 0 for plan in review["plans"] for s in plan["data"]["scenes"])

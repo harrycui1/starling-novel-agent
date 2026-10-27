@@ -7,8 +7,8 @@ from docx import Document
 
 from app.db import get_session
 from app.models import ChapterDraft, ChapterReview, EditorAction, LLMCall, OutlineRevision, Project, SourceChapter, StoryBibleSnapshot, Version
-from app.schemas import ActionInput, EditOutline, EditChapter, Instruction, Character, Direction
-from app.checks import chapter_count, outline_issues, validate_new_characters, clean_draft, count_words
+from app.schemas import ActionInput, EditOutline, EditChapter, Instruction, Character, Direction, EditDirection
+from app.checks import chapter_count, outline_issues, validate_new_characters, clean_draft, count_words, validate_direction
 from app.services import rows, latest_outline, latest_plans, current_drafts, initial_bible, version_bible, log_action
 from app.pipeline.runner import runner
 
@@ -33,6 +33,24 @@ def detail(ident: int, session: Session = Depends(get_session)):
     history = rows(ChapterDraft, ChapterDraft.version_id == ident, order=ChapterDraft.index)
     ids = [d.id for d in history]
     return {"version": version, "outline": latest_outline(ident), "outline_history": rows(OutlineRevision, OutlineRevision.version_id == ident, order=OutlineRevision.rev), "plans": latest_plans(ident), "chapters": current_drafts(ident), "draft_history": history, "reviews": rows(ChapterReview, ChapterReview.draft_id.in_(ids)), "bible": version_bible(ident).model_dump(), "actions": rows(EditorAction, EditorAction.version_id == ident, order=EditorAction.id), "calls": rows(LLMCall, LLMCall.version_id == ident, order=LLMCall.id)}
+
+
+@router.put("/versions/{ident}/direction")
+async def edit_direction(ident: int, body: EditDirection, session: Session = Depends(get_session)):
+    version = require_version(ident, session)
+    editable(version, {"awaiting_direction_confirmation"})
+    try:
+        validate_direction(body.direction, initial_bible(version.project_id))
+        if not body.direction.opening_moment.strip():
+            raise ValueError("请填写从原文结尾哪个瞬间接起")
+    except ValueError as error:
+        raise HTTPException(422, str(error))
+    before = version.direction
+    version.direction = body.direction.model_dump()
+    session.add(version)
+    log_action(session, version.project_id, ident, "direction_edit", body.editor, before=before, after=version.direction)
+    session.commit()
+    return version
 
 
 @router.post("/versions/{ident}/direction/confirm", status_code=202)

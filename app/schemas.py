@@ -68,6 +68,28 @@ class Digest(Schema):
     digest: str
 
 
+class PropState(Schema):
+    name: str = Field(min_length=1)
+    holder: str | None = None
+    location: str
+    state: str
+    evidence: list[Evidence] = []
+    updated_in: int | None = None
+
+
+class SceneState(Schema):
+    name: str = Field(min_length=1)
+    state: str
+    characters: list[str] = []
+    evidence: list[Evidence] = []
+    updated_in: int | None = None
+
+
+class StateInventory(Schema):
+    props: list[PropState]
+    scene_states: list[SceneState]
+
+
 class StoryBible(Schema):
     genre_tags: list[str]
     selling_points: list[str]
@@ -79,6 +101,9 @@ class StoryBible(Schema):
     foreshadows: list[Foreshadow]
     style: StyleProfile
     chapter_digests: list[Digest]
+    props: list[PropState] = []
+    scene_states: list[SceneState] = []
+    state_inventory_complete: bool = False
 
 
 class Foreshadows(Schema):
@@ -101,7 +126,8 @@ class Direction(Schema):
     uses_foreshadows: list[str]
     new_characters: list[NewCharacter]
     differentiation: str
-    synopsis: str
+    synopsis: str = Field(description="只描述尚未发生的续写，不重复原文回顾")
+    opening_moment: str = Field(default="", description="从原文结尾哪个具体动作、对话或瞬间直接接起")
 
 
 class Directions(Schema):
@@ -119,6 +145,15 @@ class JudgeResult(Schema):
     capacity: Score
     novelty: Score
     channel_fit: Score
+
+
+class DirectionJudgment(Schema):
+    candidate_id: str
+    judgment: JudgeResult
+
+
+class DirectionJudgments(Schema):
+    judgments: list[DirectionJudgment]
 
 
 class ForeshadowOp(Schema):
@@ -148,6 +183,7 @@ class Scene(Schema):
     characters: list[str]
     beats: list[str] = Field(min_length=3, max_length=6)
     purpose: str
+    target_words: int | None = Field(default=None, gt=0, description="本场景预算字数，所有场景合计应接近章目标")
 
 
 class ChapterPlan(Schema):
@@ -195,6 +231,8 @@ class BiblePatch(Schema):
     character_updates: list[CharacterUpdate]
     relation_updates: list[Relation]
     foreshadow_updates: list[Foreshadow]
+    prop_updates: list[PropState] = []
+    scene_updates: list[SceneState] = []
 
 
 class CreateProject(Schema):
@@ -212,6 +250,11 @@ class CreateVersion(Schema):
     manual_text: str | None = None
     target_words: int = Field(default=20000, ge=1000, le=100000)
     reason: str = ""
+    editor: str = "local-editor"
+
+
+class EditDirection(Schema):
+    direction: Direction
     editor: str = "local-editor"
 
 

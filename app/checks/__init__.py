@@ -59,7 +59,7 @@ def normalize(text):
 def verify_bible(bible, chapters):
     warnings = []
     sources = {c.index: normalize(c.content) for c in chapters}
-    for category in ("characters", "relations", "world_rules"):
+    for category in ("characters", "relations", "world_rules", "props", "scene_states"):
         for item in getattr(bible, category):
             for evidence in item.evidence:
                 evidence.verified = bool(normalize(evidence.quote)) and normalize(evidence.quote) in sources.get(evidence.chapter, "")
@@ -115,11 +115,27 @@ def outline_issues(outline, direction, start, count):
     return issues
 
 
+def allocate_scene_words(plan):
+    result = plan.model_copy(deep=True)
+    missing = [scene for scene in result.scenes if scene.target_words is None]
+    assigned = sum(scene.target_words or 0 for scene in result.scenes)
+    if missing:
+        remaining = result.target_words - assigned
+        if remaining < len(missing):
+            raise ValueError("场景字数分配已超过章节目标")
+        each, extra = divmod(remaining, len(missing))
+        for i, scene in enumerate(missing):
+            scene.target_words = each + (i < extra)
+    return result
+
+
 def validate_plans(plans, outline, bible, target):
     if [p.index for p in plans] != [c.index for c in outline.chapters]:
         raise ValueError("细纲章号与大纲不一致")
     names = {c.name for c in bible.characters}
     for plan, chapter in zip(plans, outline.chapters):
+        if any(scene.target_words is None for scene in plan.scenes) or abs(sum(scene.target_words for scene in plan.scenes) - plan.target_words) > plan.target_words * .1:
+            raise ValueError(f"第{plan.index}章场景字数合计须在章节目标的±10%以内")
         if {plan.pov_character, *(n for scene in plan.scenes for n in scene.characters)} - names:
             raise ValueError("细纲使用了未经确认的角色")
         if {(op.id, op.op) for op in chapter.foreshadow_ops} - {(op.id, op.op) for op in plan.foreshadow_ops}:
@@ -142,7 +158,7 @@ def draft_issues(text, plan, bible):
     def add(code, detail, level="revise"):
         issues.append({"code": code, "detail": detail, "verdict": level})
     if abs(count_words(body) - plan.target_words) > plan.target_words * settings.word_tolerance:
-        add("length", f"正文{count_words(body)}字，目标{plan.target_words}字")
+        add("length", f"正文{count_words(body)}字，目标{plan.target_words}字", "info")
     last = "\n".join([p for p in body.splitlines() if p.strip()][-3:])
     for phrase in settings.banned_endings_file.read_text().splitlines():
         if phrase and phrase in last:
@@ -153,18 +169,20 @@ def draft_issues(text, plan, bible):
     if abs(style_stats(body)["dialogue_ratio"] - bible.style.dialogue_ratio) > settings.dialogue_ratio_tolerance:
         add("dialogue", "对话占比偏离原文")
     known = {c.name for c in bible.characters} | {a for c in bible.characters for a in c.aliases}
+    warned = set()
     for word, tag in pseg.cut(body):
-        if tag == "nr" and len(word) >= 2 and body.count(word) >= 2 and word not in known:
-            near = any(len(word) == len(n) and sum(a != b for a, b in zip(word, n)) == 1 for n in known)
-            add("unknown_character", f"疑似未登记人名：{word}，需人工核对", "block" if near else "revise")
+        if word not in warned and tag == "nr" and len(word) >= 2 and body.count(word) >= 2 and not any(word in name for name in known):
+            warned.add(word)
+            add("unknown_character", f"疑似未登记人名：{word}，需人工核对", "info")
     return issues
 
 
 def merge_verdict(issues, review):
-    verdicts = {i["verdict"] for i in issues} | {review.verdict}
-    if "block" in verdicts or any(i.severity == "high" for i in review.consistency_issues):
+    if review.verdict == "block":
         return "block"
-    if "revise" in verdicts or not review.hook_ok or not review.payoff_ok:
+    if review.verdict == "revise" or any(i["verdict"] in {"revise", "block"} for i in issues):
+        return "revise"
+    if any(i.severity == "high" for i in review.consistency_issues) or not review.hook_ok or not review.payoff_ok:
         return "revise"
     return "pass"
 

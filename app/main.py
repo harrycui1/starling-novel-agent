@@ -27,7 +27,7 @@ app.include_router(events.router, prefix="/api")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "mode": settings.mode, "model": {role: settings.connections[name].model if name in settings.connections else "unconfigured" for role, name in settings.models.items()}, "channels": settings.channels, "target_words": settings.target_words}
+    return {"status": "ok", "mode": settings.mode, "model": {role: settings.connections[name].model if name in settings.connections else "unconfigured" for role, name in settings.models.items()}, "channels": settings.channels, "target_words": settings.target_words, "trope_vocab": settings.trope_vocab}
 
 
 dist = ROOT / "frontend/dist"
