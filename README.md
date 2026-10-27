@@ -24,6 +24,8 @@
 
 保留一份原文多个版本、逐章修订历史、带意见重写、改稿后后章衔接提醒、SSE 进度、TXT / Word 导出。审核严重度和衔接提醒不阻止提交，由编辑决定。
 
+跨电脑继续开发或迁移稿件，按 [跨电脑接力](docs/跨电脑接力.md) 操作。
+
 ## 模型配置
 
 `NOVEL_CONNECTIONS` 配置命名连接，`NOVEL_MODELS` 把 extractor / planner / writer / judge 路由到连接；支持 Chat Completions、Responses、ModelHub，接口地址填写完整 URL。连接 `parameters` 原样传给服务。模型需要容纳完整原文、续写和大纲；服务容量不足时不会偷偷截断前文。
