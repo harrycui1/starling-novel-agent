@@ -1,0 +1,14 @@
+.venv/
+.env
+.env.local
+__pycache__/
+.pytest_cache/
+/data/
+frontend/node_modules/
+frontend/dist/
+*.egg-info/
+*.tsbuildinfo
+.ruff_cache/
+.DS_Store
+*.zip
+*.tar.gz

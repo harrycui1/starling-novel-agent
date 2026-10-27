@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "starling-novel-agent"
+version = "0.1.0"
+description = "Editor-guided novel continuation pipeline"
+requires-python = ">=3.11"
+dependencies = ["fastapi>=0.115,<1", "uvicorn>=0.30,<1", "sqlmodel>=0.0.22,<1", "alembic>=1.14,<2", "pydantic-settings>=2.7,<3", "httpx>=0.27,<1", "json-repair>=0.30,<1", "jinja2>=3.1,<4", "python-multipart>=0.0.18", "python-docx>=1.1,<2", "pyyaml>=6,<7", "jieba>=0.42,<1"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10"]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.setuptools.package-data]
+app = ["prompts/*.md", "checks/data/*.txt"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
