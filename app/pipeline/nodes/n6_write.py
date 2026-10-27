@@ -3,9 +3,9 @@ from app.config import settings
 from app.llm.gateway import gateway
 from app.llm.structured import structured
 from app.models import ChapterReview, StoryBibleSnapshot, EditorAction
-from app.schemas import BiblePatch, ChapterPlan, ReviewResult, StoryBible, Digest
+from app.schemas import BiblePatch, ChapterPlan, ReviewResult, StoryBible, Digest, StateInventory
 from app.services import rows, save, store_draft, current_drafts, latest_plans, emit, version_bible
-from app.pipeline.context import NodeResult, build_write_context
+from app.pipeline.context import NodeResult, build_write_context, build_review_context
 
 
 def merge_patch(bible, patch, index, title):
@@ -32,6 +32,22 @@ def merge_patch(bible, patch, index, title):
     for f in patch.foreshadow_updates:
         foreshadows[f.id] = f
     result.foreshadows = list(foreshadows.values())
+    props = {item.name: item for item in result.props}
+    for item in patch.prop_updates:
+        if item.holder and item.holder not in characters:
+            warnings.append({"type": "unknown_prop_holder", "name": item.name, "holder": item.holder})
+            continue
+        item = item.model_copy(update={"updated_in": index})
+        props[item.name] = item
+    result.props = list(props.values())
+    scenes = {item.name: item for item in result.scene_states}
+    for item in patch.scene_updates:
+        if set(item.characters) - set(characters):
+            warnings.append({"type": "unknown_scene_character", "name": item.name})
+            continue
+        scenes[item.name] = item.model_copy(update={"updated_in": index})
+    result.scene_states = list(scenes.values())
+    result.state_inventory_complete = True
     result.timeline.extend(event for event in patch.timeline_add if event.chapter == index)
     result.chapter_digests = [d for d in result.chapter_digests if d.chapter != index] + [Digest(chapter=index, title=title, digest=patch.chapter_digest)]
     return StoryBible.model_validate(result.model_dump()), warnings
@@ -47,13 +63,20 @@ async def update_state(ctx, bible, draft, lineage):
 async def ensure_state(ctx, before):
     start = ctx.sources[-1].index
     bible = version_bible(ctx.version_id, before=start + 1)
+    if not bible.state_inventory_complete:
+        inventory = await structured("n1_state_inventory", {"chapters": [{"index": c.index, "title": c.title, "content": c.content} for c in ctx.sources], "characters": [c.name for c in bible.characters]}, StateInventory, ctx.project_id, ctx.version_id)
+        bible.props, bible.scene_states = inventory.props, inventory.scene_states
+        bible.state_inventory_complete = True
+        for state in [*bible.props, *bible.scene_states]:
+            state.updated_in = start
+        save(StoryBibleSnapshot(project_id=ctx.project_id, version_id=ctx.version_id, after_chapter=start, data=bible.model_dump(), warnings=[{"type": "legacy_state_inventory"}]))
     snapshots = rows(StoryBibleSnapshot, StoryBibleSnapshot.version_id == ctx.version_id)
     lineage = []
     for draft in current_drafts(ctx.version_id):
         if draft.index >= before:
             break
         lineage.append(draft.id)
-        valid = [s for s in snapshots if s.after_chapter == draft.index and any(w.get("type") == "checkpoint" and w.get("draft_ids") == lineage for w in s.warnings)]
+        valid = [s for s in snapshots if s.after_chapter == draft.index and s.data.get("state_inventory_complete") and any(w.get("type") == "checkpoint" and w.get("draft_ids") == lineage for w in s.warnings)]
         if valid:
             bible = StoryBible.model_validate(max(valid, key=lambda s: s.id).data)
         else:
@@ -61,16 +84,47 @@ async def ensure_state(ctx, before):
     return bible
 
 
-async def review_draft(ctx, draft, plan, bible, context):
-    issues = draft_issues(draft.content, plan, bible)
-    def validate_review(review):
-        for issue in [*review.consistency_issues, *review.plan_deviation, *review.pacing_issues, *review.ai_flavor_issues]:
-            if not normalize(issue.quote) or normalize(issue.quote) not in normalize(draft.content):
-                raise ValueError("审核引文必须逐字来自当前正文，不得编造或改写引文")
-    review = await structured("n6_review_chapter", {"context": context, "draft": draft.content, "rule_issues": issues}, ReviewResult, ctx.project_id, ctx.version_id, validate=validate_review)
-    row = ChapterReview(draft_id=draft.id, verdict=merge_verdict(issues, review), rule_issues=issues, llm_review=review.model_dump())
+REVIEW_POLICY = "2026-10-27.2"
+
+
+def filter_review_quotes(review, content):
+    result = review.model_copy(deep=True)
+    discarded = 0
+    for key in ("consistency_issues", "plan_deviation", "pacing_issues", "ai_flavor_issues"):
+        valid = [issue for issue in getattr(result, key) if normalize(issue.quote) and normalize(issue.quote) in normalize(content)]
+        discarded += len(getattr(result, key)) - len(valid)
+        setattr(result, key, valid)
+    warnings = [{"code": "review_quote", "detail": f"已丢弃{discarded}条无法在当前正文核对的审核引文，其余意见保留。", "verdict": "info"}] if discarded else []
+    return result, warnings
+
+
+def persist_review(ctx, draft, plan, bible, review):
+    review, warnings = filter_review_quotes(review, draft.content)
+    issues = draft_issues(draft.content, plan, bible) + warnings
+    row = ChapterReview(draft_id=draft.id, verdict=merge_verdict(issues, review), rule_issues=issues, llm_review={**review.model_dump(), "_policy": REVIEW_POLICY})
     save(row)
     return row
+
+
+def current_review(ctx, draft, plan, bible):
+    reviews = rows(ChapterReview, ChapterReview.draft_id == draft.id, order=ChapterReview.id.desc())
+    if not reviews:
+        return None
+    latest = reviews[0]
+    if latest.llm_review.get("_policy") != REVIEW_POLICY:
+        # The old prompt classified repairable conflicts as block. Re-review
+        # those drafts under the new policy instead of preserving that gate.
+        if latest.llm_review.get("verdict") == "block":
+            return None
+        original = {key: value for key, value in latest.llm_review.items() if key in ReviewResult.model_fields}
+        return persist_review(ctx, draft, plan, bible, ReviewResult.model_validate(original))
+    return latest
+
+
+async def review_draft(ctx, draft, plan, bible, context):
+    issues = draft_issues(draft.content, plan, bible)
+    review = await structured("n6_review_chapter", {"context": build_review_context(ctx, plan, bible), "draft": draft.content, "rule_issues": [i for i in issues if i["verdict"] != "info"]}, ReviewResult, ctx.project_id, ctx.version_id)
+    return persist_review(ctx, draft, plan, bible, review)
 
 
 async def write_one(ctx, plan, bible, existing=None, instruction="", author="ai"):
@@ -84,11 +138,10 @@ async def write_one(ctx, plan, bible, existing=None, instruction="", author="ai"
         draft = store_draft(ctx.version_id, plan.index, plan.title, clean_draft(content, plan.index, plan.title))
     remaining_rewrites = max(0, settings.max_rewrite - (existing.rev if existing and not instruction else 0))
     for attempt in range(remaining_rewrites + 1):
-        reviews = rows(ChapterReview, ChapterReview.draft_id == draft.id, order=ChapterReview.id.desc())
-        review = reviews[0] if reviews else await review_draft(ctx, draft, plan, bible, context)
+        review = current_review(ctx, draft, plan, bible) or await review_draft(ctx, draft, plan, bible, context)
         if review.verdict in {"pass", "block"} or attempt == remaining_rewrites or author != "ai":
             break
-        raw = await gateway.complete("n6_rewrite_chapter", {"context": context, "draft": draft.content, "issues": {"rules": review.rule_issues, "review": review.llm_review}, "suggestions": review.llm_review.get("fix_suggestions", [])}, [], ctx.project_id, ctx.version_id)
+        raw = await gateway.complete("n6_rewrite_chapter", {"context": context, "draft": draft.content, "issues": {"rules": [i for i in review.rule_issues if i["verdict"] != "info"], "review": {k: v for k, v in review.llm_review.items() if k != "_policy"}}, "suggestions": review.llm_review.get("fix_suggestions", [])}, [], ctx.project_id, ctx.version_id)
         draft = store_draft(ctx.version_id, plan.index, plan.title, clean_draft(raw, plan.index, plan.title))
     return draft
 
@@ -100,10 +153,13 @@ async def run(ctx):
         draft = drafts.get(plan.index)
         lineage = [d.id for d in current_drafts(ctx.version_id) if d.index <= plan.index]
         snapshots = rows(StoryBibleSnapshot, StoryBibleSnapshot.version_id == ctx.version_id, StoryBibleSnapshot.after_chapter == plan.index)
-        if draft and any(any(w.get("type") == "checkpoint" and w.get("draft_ids") == lineage for w in s.warnings) for s in snapshots):
+        checkpoint = draft and any(s.data.get("state_inventory_complete") and any(w.get("type") == "checkpoint" and w.get("draft_ids") == lineage for w in s.warnings) for s in snapshots)
+        previous_reviews = rows(ChapterReview, ChapterReview.draft_id == draft.id, order=ChapterReview.id.desc()) if draft else []
+        if checkpoint and previous_reviews and previous_reviews[0].llm_review.get("_policy") == REVIEW_POLICY:
             continue
         bible = await ensure_state(ctx, plan.index)
-        if not draft or not any(r.verdict == "pass" for r in rows(ChapterReview, ChapterReview.draft_id == draft.id)):
+        review = current_review(ctx, draft, plan, bible) if draft else None
+        if not review or review.verdict not in {"pass", "block"}:
             draft = await write_one(ctx, plan, bible, existing=draft)
         lineage = [d.id for d in current_drafts(ctx.version_id) if d.index <= plan.index]
         await update_state(ctx, bible, draft, lineage)

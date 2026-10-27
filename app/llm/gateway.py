@@ -14,6 +14,7 @@ from sqlmodel import Session
 from app.config import ROOT, settings
 from app.db import engine
 from app.models import LLMCall
+from app.llm.materials import render_sections
 
 
 def prompt_template(name, inputs):
@@ -21,7 +22,7 @@ def prompt_template(name, inputs):
     _, header, body = text.split("---", 2)
     meta = yaml.safe_load(header)
     env = Environment(undefined=StrictUndefined)
-    env.filters["json"] = lambda value: json.dumps(value, ensure_ascii=False)
+    env.filters["sections"] = render_sections
     return meta, env.from_string(body).render(payload=inputs)
 
 

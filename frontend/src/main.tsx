@@ -211,6 +211,18 @@ function App() {
       setPage("outline");
     });
   }
+  async function saveDirection() {
+    if (direction?.version_id) {
+      await act(async () => {
+        await api(`/versions/${direction.version_id}/direction`, "PUT", {
+          direction: direction.edited,
+        });
+        setDirection(undefined);
+      });
+    } else {
+      await choose("edited", direction, direction?.edited);
+    }
+  }
   function changeChapter(i: number, key: string, value: unknown) {
     if (!outline) return;
     setOutline({
@@ -266,8 +278,8 @@ function App() {
               <button
                 key={p.id}
                 className={pid === p.id ? "selected" : ""}
-                  aria-label={p.title}
-                  title={p.title}
+                aria-label={p.title}
+                title={p.title}
                 onClick={() => selectProject(p)}
               >
                 <BookOutlined />
@@ -506,6 +518,14 @@ function App() {
           )}
           {page === "directions" && pid && (
             <>
+              {project?.bible && (
+                <Card
+                  className="source-summary"
+                  title="原文梗概 · 三个方向共用"
+                >
+                  <p>{project.bible.data.logline}</p>
+                </Card>
+              )}
               <div className="section-heading">
                 <div>
                   <h2>下一步，让故事走向哪里？</h2>
@@ -572,30 +592,40 @@ function App() {
                     </ol>
                     <div className="card-label">结局落点</div>
                     <p>{d.data.ending}</p>
+                    <div className="card-label">从原文结尾接起</div>
+                    <p>
+                      {d.data.opening_moment ||
+                        "旧版方向未标注，可换一批或修改补充"}
+                    </p>
                     <details>
-                      <summary>展开梗概与评审</summary>
+                      <summary>展开续写梗概</summary>
                       <p>{d.data.synopsis}</p>
                       <p>{d.data.differentiation}</p>
-                      {Object.entries(d.judge_scores).map(([k, v]) => (
-                        <p key={k}>
-                          <b>
-                            {
-                              (
-                                {
-                                  consistency: "一致性",
-                                  payoff_strength: "爽点强度",
-                                  capacity: "字数承载力",
-                                  novelty: "新颖性",
-                                  channel_fit: "渠道契合度",
-                                } as Json
-                              )[k]
-                            }{" "}
-                            · {(v as Json).score}/5
-                          </b>
-                          <br />
-                          {(v as Json).reason}
-                        </p>
-                      ))}
+                    </details>
+                    <details>
+                      <summary>查看 AI 参考评分（可选）</summary>
+                      {Object.entries(d.judge_scores)
+                        .filter(([k]) => !k.startsWith("_"))
+                        .map(([k, v]) => (
+                          <p key={k}>
+                            <b>
+                              {
+                                (
+                                  {
+                                    consistency: "一致性",
+                                    payoff_strength: "爽点强度",
+                                    capacity: "字数承载力",
+                                    novelty: "新颖性",
+                                    channel_fit: "渠道契合度",
+                                  } as Json
+                                )[k]
+                              }{" "}
+                              · {(v as Json).score}/5
+                            </b>
+                            <br />
+                            {(v as Json).reason}
+                          </p>
+                        ))}
                     </details>
                     <Space>
                       <Button
@@ -643,7 +673,6 @@ function App() {
                       label: "故事档案",
                       children: project?.bible ? (
                         <>
-                          <p>{project.bible.data.logline}</p>
                           <Space wrap>
                             {project.bible.data.characters.map((c: Json) => (
                               <Card size="small" key={c.name} title={c.name}>
@@ -652,6 +681,31 @@ function App() {
                               </Card>
                             ))}
                           </Space>
+                          {(project.bible.data.props ?? []).length > 0 && (
+                            <>
+                              <h3>关键道具</h3>
+                              {project.bible.data.props.map((item: Json) => (
+                                <p key={item.name}>
+                                  <b>{item.name}</b> ·{" "}
+                                  {item.holder || "无人持有或未知"} ·{" "}
+                                  {item.location} · {item.state}
+                                </p>
+                              ))}
+                            </>
+                          )}
+                          {(project.bible.data.scene_states ?? []).length >
+                            0 && (
+                            <>
+                              <h3>场景状态</h3>
+                              {project.bible.data.scene_states.map(
+                                (item: Json) => (
+                                  <p key={item.name}>
+                                    <b>{item.name}</b> · {item.state}
+                                  </p>
+                                ),
+                              )}
+                            </>
+                          )}
                           {project.bible.warnings
                             .filter((w: Json) => w.type === "unverified")
                             .map((w: Json, i: number) => (
@@ -703,6 +757,21 @@ function App() {
                 <Card title="请确认整理后的方向">
                   <h3>{version?.version.direction.title}</h3>
                   <p>{version?.version.direction.synopsis}</p>
+                  <p>
+                    <b>从原文结尾接起：</b>
+                    {version?.version.direction.opening_moment}
+                  </p>
+                  <Button
+                    icon={<EditOutlined />}
+                    onClick={() =>
+                      setDirection({
+                        version_id: vid,
+                        edited: { ...version?.version.direction },
+                      })
+                    }
+                  >
+                    修改整理后的方向
+                  </Button>
                   <Button
                     type="primary"
                     onClick={() =>
@@ -1103,7 +1172,7 @@ function App() {
                                       <Card
                                         key={i}
                                         size="small"
-                                        title={`场景 ${i + 1} · ${s.location}`}
+                                        title={`场景 ${i + 1} · ${s.location} · 约 ${s.target_words ?? Math.round(p.data.target_words / p.data.scenes.length)} 字`}
                                       >
                                         <p>{s.characters.join("、")}</p>
                                         <ol>
@@ -1175,7 +1244,13 @@ function App() {
                         {review.rule_issues.map((r: Json, i: number) => (
                           <Alert
                             key={i}
-                            type={r.verdict === "block" ? "error" : "warning"}
+                            type={
+                              r.verdict === "block"
+                                ? "error"
+                                : r.verdict === "info"
+                                  ? "info"
+                                  : "warning"
+                            }
                             message={r.detail}
                           />
                         ))}
@@ -1247,7 +1322,7 @@ function App() {
             title="修改续写方向"
             open={!!direction}
             onCancel={() => setDirection(undefined)}
-            onOk={() => choose("edited", direction, direction?.edited)}
+            onOk={saveDirection}
             confirmLoading={busy}
             width={680}
           >
@@ -1257,7 +1332,8 @@ function App() {
                   ["title", "方向名称"],
                   ["hook", "一句话卖点"],
                   ["core_conflict", "核心冲突"],
-                  ["synopsis", "剧情梗概"],
+                  ["opening_moment", "从原文结尾哪个瞬间接起"],
+                  ["synopsis", "续写梗概（只写后续，不重复原文）"],
                   ["ending", "结局"],
                 ].map(([key, label]) => (
                   <div key={key}>
@@ -1277,6 +1353,21 @@ function App() {
                     />
                   </div>
                 ))}
+                <label>主套路</label>
+                <Select
+                  style={{ width: "100%" }}
+                  value={direction.edited.main_trope}
+                  options={(health.trope_vocab ?? []).map((t: string) => ({
+                    value: t,
+                    label: t,
+                  }))}
+                  onChange={(value) =>
+                    setDirection({
+                      ...direction,
+                      edited: { ...direction.edited, main_trope: value },
+                    })
+                  }
+                />
                 <label>爽点路径（每行一个，按顺序）</label>
                 <Input.TextArea
                   rows={4}
