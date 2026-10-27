@@ -42,8 +42,9 @@ const labels: Record<string, string> = {
   awaiting_direction_confirmation: "确认你的方向",
   generating_outline: "正在生成大纲",
   awaiting_outline: "等待确认大纲",
-  planning_chapters: "正在展开细纲",
-  writing: "正在续写与审核",
+  planning_chapters: "正在准备章节",
+  writing: "正在逐章续写",
+  reviewing: "正在审阅全文",
   awaiting_review: "等待审阅",
   submitted: "已提交",
   failed: "运行中断",
@@ -58,6 +59,7 @@ const active = new Set([
   "generating_outline",
   "planning_chapters",
   "writing",
+  "reviewing",
 ]);
 async function api(path: string, method = "GET", body?: unknown) {
   const response = await fetch("/api" + path, {
@@ -158,9 +160,27 @@ function App() {
     working = active.has(status);
   const chapters: Json[] = version?.chapters ?? [],
     current = chapters.find((d) => d.index === (index ?? chapters[0]?.index));
+  const draftIds = chapters.map((chapter) => chapter.id);
+  const reviewRequest = version?.version.online_metrics?.review_request ?? 0;
   const review = (version?.reviews ?? [])
-    .filter((r: Json) => r.draft_id === current?.id)
+    .filter((r: Json) =>
+      r.draft_id === current?.id &&
+      Array.isArray(r.llm_review?._draft_ids) &&
+      r.llm_review._draft_ids.length === draftIds.length &&
+      r.llm_review._draft_ids.every((id: number, i: number) => id === draftIds[i]) &&
+      r.llm_review._request === reviewRequest,
+    )
+    .sort((a: Json, b: Json) => a.id - b.id)
     .at(-1);
+  const understanding = project?.understanding?.data ?? (project?.bible ? {
+    synopsis: project.bible.data.logline,
+    characters: project.bible.data.characters.map((c: Json) => ({
+      name: c.name,
+      role: c.role,
+      description: [...(c.personality ?? []), c.goal_now].filter(Boolean).join("；"),
+    })),
+    ending: project.source_chapters.at(-1)?.content.slice(-600),
+  } : undefined);
   async function act(work: () => Promise<unknown>) {
     setBusy(true);
     try {
@@ -423,7 +443,7 @@ function App() {
                   <span className="number">01</span>
                   <div>
                     <h2>导入故事开头</h2>
-                    <p>建议约 10,000 字，系统会理解人物、伏笔与原文风格。</p>
+                    <p>建议约 10,000 字，每章写作都会读取完整前文。</p>
                   </div>
                 </div>
                 <label>作品名称</label>
@@ -493,8 +513,8 @@ function App() {
                 </p>
                 {[
                   "三种不同的剧情走向",
-                  "人物与伏笔持续追踪",
-                  "逐章审核，保留每次修改",
+                  "完整前文，逐章衔接",
+                  "问题作为批注，由你决定修改",
                 ].map((t, i) => (
                   <div className="guide-item" key={t}>
                     <span>{String(i + 1).padStart(2, "0")}</span>
@@ -533,15 +553,6 @@ function App() {
                       working ||
                       project?.project.status !== "awaiting_direction"
                     }
-                    onClick={() => choose("auto")}
-                  >
-                    自动选择
-                  </Button>
-                  <Button
-                    disabled={
-                      working ||
-                      project?.project.status !== "awaiting_direction"
-                    }
                     onClick={() => setManual(true)}
                   >
                     自己写方向
@@ -562,6 +573,8 @@ function App() {
                     </div>
                     <h2>{d.data.title}</h2>
                     <p className="hook">{d.data.hook}</p>
+                    <div className="card-label">从原文哪里接起</div>
+                    <p>{d.data.continuation_start || "请结合原文结尾核对承接点"}</p>
                     <div className="card-label">核心冲突</div>
                     <p>{d.data.core_conflict}</p>
                     <div className="card-label">爽点路径</div>
@@ -573,29 +586,9 @@ function App() {
                     <div className="card-label">结局落点</div>
                     <p>{d.data.ending}</p>
                     <details>
-                      <summary>展开梗概与评审</summary>
+                      <summary>展开续写梗概</summary>
                       <p>{d.data.synopsis}</p>
                       <p>{d.data.differentiation}</p>
-                      {Object.entries(d.judge_scores).map(([k, v]) => (
-                        <p key={k}>
-                          <b>
-                            {
-                              (
-                                {
-                                  consistency: "一致性",
-                                  payoff_strength: "爽点强度",
-                                  capacity: "字数承载力",
-                                  novelty: "新颖性",
-                                  channel_fit: "渠道契合度",
-                                } as Json
-                              )[k]
-                            }{" "}
-                            · {(v as Json).score}/5
-                          </b>
-                          <br />
-                          {(v as Json).reason}
-                        </p>
-                      ))}
                     </details>
                     <Space>
                       <Button
@@ -639,28 +632,31 @@ function App() {
                 <Tabs
                   items={[
                     {
-                      key: "bible",
-                      label: "故事档案",
-                      children: project?.bible ? (
+                      key: "understanding",
+                      label: "梗概与人物",
+                      children: understanding ? (
                         <>
-                          <p>{project.bible.data.logline}</p>
+                          <p>{understanding.synopsis}</p>
                           <Space wrap>
-                            {project.bible.data.characters.map((c: Json) => (
-                              <Card size="small" key={c.name} title={c.name}>
-                                <p>{c.personality.join(" / ")}</p>
-                                <p>{c.goal_now}</p>
-                              </Card>
-                            ))}
+                            {understanding.characters.map(
+                              (c: Json) => (
+                                <Card size="small" key={c.name} title={c.name}>
+                                  <p>
+                                    {({
+                                      protagonist: "主角",
+                                      deuteragonist: "重要人物",
+                                      antagonist: "对手",
+                                      supporting: "配角",
+                                      minor: "次要人物",
+                                    } as Json)[c.role] ?? c.role}
+                                  </p>
+                                  <p>{c.description}</p>
+                                </Card>
+                              ),
+                            )}
                           </Space>
-                          {project.bible.warnings
-                            .filter((w: Json) => w.type === "unverified")
-                            .map((w: Json, i: number) => (
-                              <Alert
-                                key={i}
-                                type="warning"
-                                message={`待核对证据：${w.entry} · ${w.quote}`}
-                              />
-                            ))}
+                          <h3>原文停在这里</h3>
+                          <p>{understanding.ending}</p>
                         </>
                       ) : (
                         <Empty description="等待理解原文" />
@@ -690,7 +686,7 @@ function App() {
               <div className="section-heading">
                 <div>
                   <h2>先把故事的骨架定下来</h2>
-                  <p>确认章节走向、爽点和伏笔回收，再开始正文创作。</p>
+                  <p>一次确认每章要发生的事、爽点和结尾，再开始正文创作。</p>
                 </div>
                 <Button
                   disabled={!chapters.length}
@@ -702,7 +698,16 @@ function App() {
               {status === "awaiting_direction_confirmation" && (
                 <Card title="请确认整理后的方向">
                   <h3>{version?.version.direction.title}</h3>
+                  <Tag>{version?.version.direction.main_trope}</Tag>
+                  <p>承接：{version?.version.direction.continuation_start || "请结合原文结尾核对承接点"}</p>
                   <p>{version?.version.direction.synopsis}</p>
+                  <p>冲突：{version?.version.direction.core_conflict}</p>
+                  <ol>
+                    {version?.version.direction.payoff_plan?.map((payoff: string, i: number) => (
+                      <li key={i}>{payoff}</li>
+                    ))}
+                  </ol>
+                  <p>结局：{version?.version.direction.ending}</p>
                   <Button
                     type="primary"
                     onClick={() =>
@@ -844,7 +849,7 @@ function App() {
                             {[
                               ["summary", "章节内容"],
                               ["payoff", "爽点兑现"],
-                              ["hook", "章末钩子"],
+                              ["hook", "结尾停在哪"],
                             ].map(([key, label]) => (
                               <div key={key}>
                                 <label>{label}</label>
@@ -866,17 +871,25 @@ function App() {
                                 />
                               </div>
                             ))}
-                            {c.foreshadow_ops.length > 0 && (
-                              <p className="muted">
-                                伏笔：
-                                {c.foreshadow_ops
-                                  .map(
-                                    (o: Json) =>
-                                      `${o.id} · ${o.op === "payoff" ? "回收" : "埋设"}：${o.note}`,
-                                  )
-                                  .join("；")}
-                              </p>
-                            )}
+                            <label>本章事件（每行一项，按发生顺序）</label>
+                            <Input.TextArea
+                              autoSize={{ minRows: 3 }}
+                              disabled={status !== "awaiting_outline"}
+                              value={(c.events ?? []).join("\n")}
+                              onChange={(e) =>
+                                changeChapter(i, "events", e.target.value.split("\n"))
+                              }
+                            />
+                            <label>本章目标字数</label>
+                            <InputNumber
+                              min={1}
+                              step={100}
+                              disabled={status !== "awaiting_outline"}
+                              value={c.target_words}
+                              onChange={(value) =>
+                                changeChapter(i, "target_words", value)
+                              }
+                            />
                           </div>
                         </div>
                       </Card>
@@ -935,7 +948,7 @@ function App() {
               <div className="section-heading">
                 <div>
                   <h2>逐章打磨，故事由你定稿</h2>
-                  <p>查看审核意见、对照修改历史，确认后提交。</p>
+                  <p>批注供你参考，是否修改由你决定；确认全文后可直接提交。</p>
                 </div>
                 <Space>
                   <Button
@@ -949,6 +962,15 @@ function App() {
                     href={`/api/versions/${vid}/export?format=docx`}
                   >
                     Word
+                  </Button>
+                  <Button
+                    disabled={status !== "awaiting_review"}
+                    loading={busy}
+                    onClick={() =>
+                      act(() => api(`/versions/${vid}/review`, "POST", {}))
+                    }
+                  >
+                    重新审核全文
                   </Button>
                   <Button
                     type="primary"
@@ -993,7 +1015,7 @@ function App() {
                         <small>
                           {d.word_count} 字 · 修订 {d.rev}
                           {version?.version.stale_chapters.includes(d.index)
-                            ? " · 待核对"
+                            ? " · 衔接提醒"
                             : ""}
                         </small>
                       </button>
@@ -1018,19 +1040,16 @@ function App() {
                               <div className="reader-tools">
                                 <Tag
                                   color={
-                                    review?.editor_accepted ||
-                                    review?.verdict === "pass"
-                                      ? "green"
-                                      : "orange"
+                                    review?.editor_accepted ? "green" : "default"
                                   }
                                 >
                                   {review?.editor_accepted
-                                    ? "编辑已确认"
-                                    : review?.verdict === "pass"
-                                      ? "审核通过"
+                                    ? "编辑已查看"
+                                    : review?.llm_review.error
+                                      ? "批注暂不可用"
                                       : review
-                                        ? "有修改意见"
-                                        : "等待审核"}
+                                        ? "已有审阅批注"
+                                        : working ? "批注更新中" : "需要重新审核"}
                                 </Tag>
                                 <Space>
                                   <Button
@@ -1078,7 +1097,7 @@ function App() {
                                       })
                                     }
                                   >
-                                    保存并重新审核
+                                    保存并更新批注
                                   </Button>
                                 </>
                               ) : (
@@ -1090,30 +1109,23 @@ function App() {
                           ),
                         },
                         {
-                          key: "plan",
-                          label: "本章细纲",
+                          key: "outline",
+                          label: "本章要求",
                           children: (
                             <>
-                              {version?.plans
-                                .filter((p: Json) => p.index === current.index)
-                                .map((p: Json) => (
-                                  <div key={p.id}>
-                                    <p>视角人物：{p.data.pov_character}</p>
-                                    {p.data.scenes.map((s: Json, i: number) => (
-                                      <Card
-                                        key={i}
-                                        size="small"
-                                        title={`场景 ${i + 1} · ${s.location}`}
-                                      >
-                                        <p>{s.characters.join("、")}</p>
-                                        <ol>
-                                          {s.beats.map((b: string) => (
-                                            <li key={b}>{b}</li>
-                                          ))}
-                                        </ol>
-                                      </Card>
-                                    ))}
-                                    <p>结尾：{p.data.ending_beat}</p>
+                              {outline?.chapters
+                                .filter((c: Json) => c.index === current.index)
+                                .map((c: Json) => (
+                                  <div key={c.index}>
+                                    <p>{c.summary}</p>
+                                    <ol>
+                                      {(c.events ?? []).map((event: string, i: number) => (
+                                        <li key={i}>{event}</li>
+                                      ))}
+                                    </ol>
+                                    <p>爽点：{c.payoff || "按本章节奏推进"}</p>
+                                    <p>结尾：{c.hook}</p>
+                                    {c.target_words && <p>目标：{c.target_words} 字</p>}
                                   </div>
                                 ))}
                             </>
@@ -1169,13 +1181,21 @@ function App() {
                       ]}
                     />
                   </Card>
-                  <Card size="small" title="审阅意见" className="review-notes">
+                  <Card size="small" title="审阅批注" className="review-notes">
+                    <p>批注与字数提示不影响提交，是否修改由你决定。</p>
                     {review ? (
                       <>
+                        {review.llm_review.error && (
+                          <Alert
+                            type="info"
+                            message="本次模型批注暂不可用，正文已保存，可继续编辑或提交。"
+                            description={review.llm_review.error}
+                          />
+                        )}
                         {review.rule_issues.map((r: Json, i: number) => (
                           <Alert
                             key={i}
-                            type={r.verdict === "block" ? "error" : "warning"}
+                            type={r.verdict === "info" ? "info" : "warning"}
                             message={r.detail}
                           />
                         ))}
@@ -1189,12 +1209,27 @@ function App() {
                             (r: Json, i: number) => (
                               <div className="issue" key={k + i}>
                                 <Tag>
+                                  {({
+                                    consistency_issues: "前后矛盾",
+                                    plan_deviation: "大纲偏离",
+                                    pacing_issues: "节奏",
+                                    ai_flavor_issues: "套话与文风",
+                                  } as Json)[k]}
+                                </Tag>
+                                <Tag>
                                   {r.severity === "high"
                                     ? "高风险"
                                     : "建议修改"}
                                 </Tag>
                                 <blockquote>{r.quote}</blockquote>
                                 <p>{r.reason}</p>
+                                {r.fix_suggestions?.length > 0 && (
+                                  <ul>
+                                    {r.fix_suggestions.map((suggestion: string, j: number) => (
+                                      <li key={j}>{suggestion}</li>
+                                    ))}
+                                  </ul>
+                                )}
                               </div>
                             ),
                           ),
@@ -1208,7 +1243,7 @@ function App() {
                         </ol>
                         {review.verdict === "pass" &&
                           !review.rule_issues.length && (
-                            <p>未发现需拦截的问题。</p>
+                            <p>本次审阅未发现明显问题。</p>
                           )}
                         <Button
                           block
@@ -1219,16 +1254,25 @@ function App() {
                               api(
                                 `/versions/${vid}/chapters/${current.index}/accept`,
                                 "POST",
-                                { reason: "编辑已查看审核意见并确认本章" },
+                                { reason: "编辑已查看本章批注和衔接提示" },
                               ),
                             )
                           }
                         >
-                          已核对，确认采用
+                          已查看批注与衔接
                         </Button>
                       </>
+                    ) : working ? (
+                      <Space direction="vertical">
+                        <Spin />
+                        <p>
+                          {version?.reviews.length
+                            ? "前文或正文已修改，正在更新批注。"
+                            : "正在审阅全文，完成后显示批注。"}
+                        </p>
+                      </Space>
                     ) : (
-                      <Spin />
+                      <Empty description="暂无对应当前全文的批注，请点击“重新审核全文”。" />
                     )}
                   </Card>
                 </div>
@@ -1255,16 +1299,18 @@ function App() {
               <>
                 {[
                   ["title", "方向名称"],
+                  ["main_trope", "主套路"],
                   ["hook", "一句话卖点"],
+                  ["continuation_start", "从原文哪里接起"],
                   ["core_conflict", "核心冲突"],
-                  ["synopsis", "剧情梗概"],
+                  ["synopsis", "续写梗概"],
                   ["ending", "结局"],
                 ].map(([key, label]) => (
                   <div key={key}>
                     <label>{label}</label>
                     <Input.TextArea
                       autoSize={{ minRows: key === "synopsis" ? 5 : 1 }}
-                      value={direction.edited[key]}
+                      value={direction.edited[key] ?? ""}
                       onChange={(e) =>
                         setDirection({
                           ...direction,
@@ -1288,24 +1334,6 @@ function App() {
                         ...direction.edited,
                         payoff_plan: e.target.value.split("\n"),
                       },
-                    })
-                  }
-                />
-                <label>计划回收的伏笔</label>
-                <Select
-                  mode="multiple"
-                  style={{ width: "100%" }}
-                  value={direction.edited.uses_foreshadows}
-                  options={(project?.bible?.data.foreshadows ?? []).map(
-                    (f: Json) => ({
-                      value: f.id,
-                      label: `${f.id} · ${f.content}`,
-                    }),
-                  )}
-                  onChange={(v) =>
-                    setDirection({
-                      ...direction,
-                      edited: { ...direction.edited, uses_foreshadows: v },
                     })
                   }
                 />

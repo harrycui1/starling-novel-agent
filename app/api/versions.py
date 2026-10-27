@@ -6,11 +6,12 @@ from sqlmodel import Session, select
 from docx import Document
 
 from app.db import get_session
-from app.models import ChapterDraft, ChapterReview, EditorAction, LLMCall, OutlineRevision, Project, SourceChapter, StoryBibleSnapshot, Version
-from app.schemas import ActionInput, EditOutline, EditChapter, Instruction, Character, Direction
-from app.checks import chapter_count, outline_issues, validate_new_characters, clean_draft, count_words
-from app.services import rows, latest_outline, latest_plans, current_drafts, initial_bible, version_bible, log_action
+from app.models import ChapterDraft, ChapterReview, EditorAction, LLMCall, OutlineRevision, Project, SourceChapter, Version
+from app.schemas import ActionInput, EditOutline, EditChapter, Instruction, Outline
+from app.checks import chapter_count, clean_draft, count_words
+from app.services import rows, latest_outline, latest_plans, current_drafts, log_action
 from app.pipeline.runner import runner
+from app.pipeline.nodes.n4_outline import allocate_words
 
 router = APIRouter()
 
@@ -30,9 +31,12 @@ def editable(version, statuses):
 @router.get("/versions/{ident}")
 def detail(ident: int, session: Session = Depends(get_session)):
     version = require_version(ident, session)
+    outline = latest_outline(ident)
+    if outline and any(not c.get("target_words") for c in outline.data["chapters"]):
+        outline.data = allocate_words(Outline.model_validate(outline.data), version.target_words).model_dump()
     history = rows(ChapterDraft, ChapterDraft.version_id == ident, order=ChapterDraft.index)
     ids = [d.id for d in history]
-    return {"version": version, "outline": latest_outline(ident), "outline_history": rows(OutlineRevision, OutlineRevision.version_id == ident, order=OutlineRevision.rev), "plans": latest_plans(ident), "chapters": current_drafts(ident), "draft_history": history, "reviews": rows(ChapterReview, ChapterReview.draft_id.in_(ids)), "bible": version_bible(ident).model_dump(), "actions": rows(EditorAction, EditorAction.version_id == ident, order=EditorAction.id), "calls": rows(LLMCall, LLMCall.version_id == ident, order=LLMCall.id)}
+    return {"version": version, "outline": outline, "outline_history": rows(OutlineRevision, OutlineRevision.version_id == ident, order=OutlineRevision.rev), "plans": latest_plans(ident), "chapters": current_drafts(ident), "draft_history": history, "reviews": rows(ChapterReview, ChapterReview.draft_id.in_(ids)), "actions": rows(EditorAction, EditorAction.version_id == ident, order=EditorAction.id), "calls": rows(LLMCall, LLMCall.version_id == ident, order=LLMCall.id)}
 
 
 @router.post("/versions/{ident}/direction/confirm", status_code=202)
@@ -56,12 +60,10 @@ def edit_outline(ident: int, body: EditOutline, session: Session = Depends(get_s
     count = chapter_count(version.target_words, project.channel)
     if [c.index for c in body.outline.chapters] != list(range(sources[-1].index + 1, sources[-1].index + count + 1)):
         raise HTTPException(422, "请保持指定章节数与连续章号")
-    try:
-        validate_new_characters(body.outline.new_characters, initial_bible(project.id))
-    except ValueError as error:
-        raise HTTPException(422, str(error))
+    if any(not c.target_words for c in body.outline.chapters) or sum(c.target_words for c in body.outline.chapters) != version.target_words:
+        raise HTTPException(422, "各章目标字数须为正数，合计须等于版本目标字数")
     old = latest_outline(ident)
-    revision = OutlineRevision(version_id=ident, rev=old.rev + 1, data=body.outline.model_dump(), author=body.editor, warnings=outline_issues(body.outline, Direction.model_validate(version.direction), sources[-1].index + 1, count))
+    revision = OutlineRevision(version_id=ident, rev=old.rev + 1, data=body.outline.model_dump(), author=body.editor)
     session.add(revision)
     log_action(session, project.id, ident, "outline_edit", body.editor, before=old.data, after=revision.data)
     session.commit()
@@ -74,17 +76,8 @@ async def confirm_outline(ident: int, body: ActionInput, session: Session = Depe
     version = require_version(ident, session)
     editable(version, {"awaiting_outline"})
     outline = latest_outline(ident)
-    bible = initial_bible(version.project_id)
-    for item in outline.data["new_characters"]:
-        bible.characters.append(Character(name=item["name"], role="supporting", goal_now=item["purpose"]))
-    notes = {op["id"]: f"第{c['index']}章：{op['note']}" for c in outline.data["chapters"] for op in c["foreshadow_ops"] if op["op"] == "payoff"}
-    for foreshadow in bible.foreshadows:
-        if foreshadow.id in notes:
-            foreshadow.plan_note = notes[foreshadow.id]
-    start = max(c.index for c in rows(SourceChapter, SourceChapter.project_id == version.project_id))
-    session.add(StoryBibleSnapshot(project_id=version.project_id, version_id=ident, after_chapter=start, data=bible.model_dump()))
     outline.confirmed = True
-    version.status, version.current_node = "queued", "N5"
+    version.status, version.current_node = "queued", "N6"
     session.add_all([outline, version])
     log_action(session, version.project_id, ident, "outline_confirm", body.editor, revision=outline.rev, warnings=outline.warnings, new_characters=outline.data["new_characters"])
     session.commit()
@@ -152,6 +145,19 @@ def accept(ident: int, index: int, body: ActionInput, session: Session = Depends
     return {"status": "accepted"}
 
 
+@router.post("/versions/{ident}/review", status_code=202)
+async def review(ident: int, body: ActionInput, session: Session = Depends(get_session)):
+    version = require_version(ident, session)
+    editable(version, {"awaiting_review"})
+    version.online_metrics = {**version.online_metrics, "review_request": version.online_metrics.get("review_request", 0) + 1}
+    version.status, version.current_node = "queued", "N7"
+    session.add(version)
+    log_action(session, version.project_id, ident, "review_request", body.editor, reason=body.reason)
+    session.commit()
+    runner.enqueue(version.project_id, ident)
+    return {"status": "queued"}
+
+
 @router.post("/versions/{ident}/retry", status_code=202)
 async def retry(ident: int, body: ActionInput, session: Session = Depends(get_session)):
     version = require_version(ident, session)
@@ -171,15 +177,9 @@ def submit(ident: int, body: ActionInput, session: Session = Depends(get_session
     drafts = current_drafts(ident)
     if len(drafts) != version.total_chapters:
         raise HTTPException(409, "还有章节未生成")
-    if version.stale_chapters:
-        raise HTTPException(409, "请先核对被标记为可能不连贯的章节")
-    for draft in drafts:
-        reviews = rows(ChapterReview, ChapterReview.draft_id == draft.id, order=ChapterReview.id.desc())
-        if not reviews or (reviews[0].verdict != "pass" and not reviews[0].editor_accepted):
-            raise HTTPException(409, f"第{draft.index}章存在审核意见，请修改或人工确认")
     version.status = "submitted"
     session.add(version)
-    log_action(session, version.project_id, ident, "version_submit", body.editor, draft_ids=[d.id for d in drafts])
+    log_action(session, version.project_id, ident, "version_submit", body.editor, draft_ids=[d.id for d in drafts], stale_chapters=version.stale_chapters, reason=body.reason)
     session.commit()
     return {"status": "submitted"}
 

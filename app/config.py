@@ -26,17 +26,7 @@ class Settings(BaseSettings):
     channels: dict[str, dict[str, int]] = Field(default_factory=lambda: {"default": {"chapter_words": 2500}})
     min_chapters: int = 5
     max_chapters: int = 12
-    n2_candidates: int = 8
-    n2_shortlist: int = 3
-    n2_dedup_threshold: float = 0.6
-    n2_recent_window_days: int = 30
-    trope_vocab: list[str] = Field(default_factory=lambda: ["打脸", "逆袭", "复仇", "掉马", "追妻", "揭秘", "升级", "救赎", "宅斗", "权谋"])
-    judge_weights: dict[str, float] = Field(default_factory=lambda: {"consistency": .3, "payoff_strength": .25, "capacity": .15, "novelty": .15, "channel_fit": .15})
-    max_gap_between_payoffs: int = 2
-    max_rewrite: int = 2
     word_tolerance: float = .2
-    dialogue_ratio_tolerance: float = .10
-    context_budget_tokens: int = 60000
     max_parallel_versions: int = 4
     structured_max_retry: int = 2
     request_retries: int = 2

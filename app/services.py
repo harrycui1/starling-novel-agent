@@ -1,8 +1,7 @@
 from sqlmodel import Session, select
 
 from app.db import engine
-from app.models import ChapterDraft, ChapterPlanRow, EditorAction, OutlineRevision, PipelineEvent, StoryBibleSnapshot, Version
-from app.schemas import StoryBible
+from app.models import ChapterDraft, ChapterPlanRow, EditorAction, OutlineRevision, PipelineEvent, SourceUnderstanding, StoryBibleSnapshot
 
 
 def one(model, ident):
@@ -49,23 +48,19 @@ def latest_plans(version_id):
     return sorted([p for p in plans if p.generation == plans[0].generation], key=lambda p: p.index) if plans else []
 
 
-def initial_bible(project_id):
+def source_understanding(project_id):
+    summaries = rows(SourceUnderstanding, SourceUnderstanding.project_id == project_id, order=SourceUnderstanding.id.desc())
+    if summaries:
+        return summaries[0]
     snapshots = rows(StoryBibleSnapshot, StoryBibleSnapshot.project_id == project_id, StoryBibleSnapshot.version_id == None, order=StoryBibleSnapshot.id.desc())
-    if not snapshots:
-        raise ValueError("原文档案尚未生成")
-    return StoryBible.model_validate(snapshots[0].data)
-
-
-def version_bible(version_id, before=None):
-    version = one(Version, version_id)
-    cond = [StoryBibleSnapshot.version_id == version_id]
-    if before is not None:
-        cond.append(StoryBibleSnapshot.after_chapter < before)
-    snaps = rows(StoryBibleSnapshot, *cond, order=StoryBibleSnapshot.after_chapter.desc())
-    if snaps:
-        highest = max(snaps, key=lambda s: (s.after_chapter, s.id))
-        return StoryBible.model_validate(highest.data)
-    return initial_bible(version.project_id)
+    if snapshots:
+        old = snapshots[0].data
+        return SourceUnderstanding(project_id=project_id, data={
+            "synopsis": old.get("logline", ""),
+            "characters": [{"name": c["name"], "role": c["role"], "description": "、".join(c.get("personality", []))} for c in old.get("characters", [])],
+            "ending": "",
+        })
+    return None
 
 
 def store_draft(version_id, index, title, content, author="ai"):

@@ -36,6 +36,13 @@ class SourceChapter(SQLModel, table=True):
     content: str
 
 
+class SourceUnderstanding(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id", index=True)
+    data: dict = json_field()
+    created_at: datetime = Field(default_factory=now)
+
+
 class StoryBibleSnapshot(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     project_id: int = Field(foreign_key="project.id", index=True)

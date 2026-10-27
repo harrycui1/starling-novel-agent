@@ -27,7 +27,15 @@ def report(version_id):
     total_versions = sum(distribution.values())
     total_words = sum(d.word_count for d in selected)
     high = sum(1 for r in latest_reviews for issue in r.llm_review.get("consistency_issues", []) if issue["severity"] == "high")
+    by_prompt = {}
+    for call in calls:
+        node = by_prompt.setdefault(call.prompt_name, {"calls": 0, "input_tokens": 0, "output_tokens": 0, "latency_ms": 0, "failed": 0})
+        node["calls"] += 1
+        node["input_tokens"] += call.input_tokens
+        node["output_tokens"] += call.output_tokens
+        node["latency_ms"] += call.latency_ms
+        node["failed"] += not call.success
     prompt_versions = {}
     for c in calls:
         prompt_versions.setdefault(c.prompt_name, set()).add(c.prompt_version)
-    return {"version_id": version_id, "status": version.status, "words": total_words, "chapters": len(selected), "consistency_errors_per_10k": high * 10000 / max(total_words, 1), "first_draft_pass_rate": sum(r.verdict == "pass" for r in first_reviews) / max(len(first_reviews), 1), "first_draft_rule_issue_rate": sum(bool(r.rule_issues) for r in first_reviews) / max(len(first_reviews), 1), "mean_ai_rewrites": sum(d.rev > 0 and d.author == "ai" for d in drafts) / max(len(selected), 1), "direction_similarity_mean": sum(pairs) / max(len(pairs), 1), "trope_entropy": -sum((n / total_versions) * math.log2(n / total_versions) for n in distribution.values()), "input_tokens": sum(c.input_tokens for c in calls), "output_tokens": sum(c.output_tokens for c in calls), "model_latency_ms": sum(c.latency_ms for c in calls), "failed_calls": sum(not c.success for c in calls), "prompt_versions": {k: sorted(v) for k, v in prompt_versions.items()}, "notes": ["token含本项目共享的原文理解和方向生成调用，跨版本对比时请注意共享成本。", "一致性错误为模型判定，需人工校准；未配置单价，不估算费用。"]}
+    return {"version_id": version_id, "status": version.status, "words": total_words, "chapters": len(selected), "call_count": len(calls), "calls_by_prompt": by_prompt, "reviewed_chapters": sum(not bool(r.llm_review.get("error")) for r in latest_reviews), "review_error_chapters": sum(bool(r.llm_review.get("error")) for r in latest_reviews), "advisory_issue_chapters": sum(r.verdict in {"revise", "block"} for r in latest_reviews), "consistency_errors_per_10k": high * 10000 / max(total_words, 1), "first_draft_pass_rate": sum(r.verdict == "pass" for r in first_reviews) / max(len(first_reviews), 1), "first_draft_rule_issue_rate": sum(bool(r.rule_issues) for r in first_reviews) / max(len(first_reviews), 1), "mean_ai_rewrites": sum(d.rev > 0 and d.author == "ai" for d in drafts) / max(len(selected), 1), "direction_similarity_mean": sum(pairs) / max(len(pairs), 1), "trope_entropy": -sum((n / total_versions) * math.log2(n / total_versions) for n in distribution.values()), "input_tokens": sum(c.input_tokens for c in calls), "output_tokens": sum(c.output_tokens for c in calls), "model_latency_ms": sum(c.latency_ms for c in calls), "failed_calls": sum(not c.success for c in calls), "prompt_versions": {k: sorted(v) for k, v in prompt_versions.items()}, "notes": ["token含本项目共享的原文理解和方向生成调用，跨版本对比时请注意共享成本。", "审核意见仅供参考，不参与提交门禁；一致性错误和首稿通过率为模型建议，需人工盲评校准。", "审核失败不等于无问题，请同时看review_error_chapters；未配置单价，不估算金额。"]}

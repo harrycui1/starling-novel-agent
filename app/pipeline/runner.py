@@ -3,10 +3,10 @@ from app.config import settings
 from app.models import Project, Version
 from app.services import one, rows, save, emit
 from app.pipeline.context import NodeContext
-from app.pipeline.nodes import n1_understand, n2_directions, n3_select, n4_outline, n5_chapter_plan, n6_write
+from app.pipeline.nodes import n1_understand, n2_directions, n3_select, n4_outline, n6_write, n7_review
 
-NODES = {"N1": n1_understand.run, "N2": n2_directions.run, "N3": n3_select.run, "N4": n4_outline.run, "N5": n5_chapter_plan.run, "N6": n6_write.run, "N6_EDIT": n6_write.edit}
-RUNNING_STATUS = {"N1": "understanding", "N2": "generating_directions", "N3": "judging", "N4": "generating_outline", "N5": "planning_chapters", "N6": "writing", "N6_EDIT": "writing"}
+NODES = {"N1": n1_understand.run, "N2": n2_directions.run, "N3": n3_select.run, "N4": n4_outline.run, "N5": n6_write.run, "N6": n6_write.run, "N7": n7_review.run, "N6_EDIT": n6_write.edit}
+RUNNING_STATUS = {"N1": "understanding", "N2": "generating_directions", "N3": "judging", "N4": "generating_outline", "N5": "planning_chapters", "N6": "writing", "N7": "reviewing", "N6_EDIT": "writing"}
 STOPS = {"awaiting_direction", "awaiting_direction_confirmation", "awaiting_outline", "awaiting_review"}
 
 

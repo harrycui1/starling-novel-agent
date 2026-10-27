@@ -5,10 +5,10 @@ from docx import Document
 
 from app.config import settings
 from app.db import get_session
-from app.models import Project, SourceChapter, DirectionCandidate, StoryBibleSnapshot, Version
+from app.models import Project, SourceChapter, DirectionCandidate, Version
 from app.schemas import CreateProject, CreateVersion, ActionInput
-from app.services import log_action, rows, one, initial_bible
-from app.checks import count_words, split_chapters, validate_direction, source_index
+from app.services import log_action, rows, source_understanding
+from app.checks import count_words, split_chapters, source_index
 from app.pipeline.runner import runner
 
 router = APIRouter()
@@ -83,8 +83,7 @@ def list_projects(session: Session = Depends(get_session)):
 @router.get("/projects/{project_id}")
 def detail(project_id: int, session: Session = Depends(get_session)):
     project = require_project(project_id, session)
-    bibles = rows(StoryBibleSnapshot, StoryBibleSnapshot.project_id == project_id, StoryBibleSnapshot.version_id == None, order=StoryBibleSnapshot.id.desc())
-    return {"project": project, "source_chapters": rows(SourceChapter, SourceChapter.project_id == project_id, order=SourceChapter.index), "bible": bibles[0] if bibles else None, "directions": rows(DirectionCandidate, DirectionCandidate.project_id == project_id, DirectionCandidate.batch_id == project.active_batch, DirectionCandidate.shortlisted == True, order=DirectionCandidate.score.desc()), "versions": rows(Version, Version.project_id == project_id, order=Version.id.desc())}
+    return {"project": project, "source_chapters": rows(SourceChapter, SourceChapter.project_id == project_id, order=SourceChapter.index), "understanding": source_understanding(project_id), "directions": rows(DirectionCandidate, DirectionCandidate.project_id == project_id, DirectionCandidate.batch_id == project.active_batch, DirectionCandidate.shortlisted == True, order=DirectionCandidate.id), "versions": rows(Version, Version.project_id == project_id, order=Version.id.desc())}
 
 
 @router.post("/projects/{project_id}/directions/regenerate", status_code=202)
@@ -123,11 +122,9 @@ async def create_version(project_id: int, body: CreateVersion, session: Session 
     check_idle(project)
     if project.status != "awaiting_direction":
         raise HTTPException(409, "请等待方向生成完成")
-    shown = rows(DirectionCandidate, DirectionCandidate.project_id == project_id, DirectionCandidate.batch_id == project.active_batch, DirectionCandidate.shortlisted == True, order=DirectionCandidate.score.desc())
+    shown = rows(DirectionCandidate, DirectionCandidate.project_id == project_id, DirectionCandidate.batch_id == project.active_batch, DirectionCandidate.shortlisted == True, order=DirectionCandidate.id)
     candidate = None
-    if body.source == "auto":
-        candidate = shown[0] if shown else None
-    elif body.source in {"candidate", "edited"}:
+    if body.source in {"candidate", "edited"}:
         candidate = next((d for d in shown if d.id == body.candidate_id), None)
     if body.source != "manual" and candidate is None:
         raise HTTPException(422, "请选择当前批次的有效方向")
@@ -139,15 +136,10 @@ async def create_version(project_id: int, body: CreateVersion, session: Session 
         direction = {"manual_text": body.manual_text}
     else:
         direction = body.direction.model_dump() if body.source == "edited" else candidate.data
-        from app.schemas import Direction
-        try:
-            validate_direction(Direction.model_validate(direction), initial_bible(project_id))
-        except ValueError as error:
-            raise HTTPException(422, str(error))
     version = Version(project_id=project_id, direction_source=body.source, direction_candidate_id=candidate.id if candidate else None, direction=direction, target_words=body.target_words, current_node="N3" if body.source == "manual" else "N4")
     session.add(version)
     session.flush()
-    action = {"candidate": "direction_select", "edited": "direction_edit", "manual": "direction_manual", "auto": "direction_auto"}[body.source]
+    action = {"candidate": "direction_select", "edited": "direction_edit", "manual": "direction_manual"}[body.source]
     log_action(session, project_id, version.id, action, body.editor, displayed_candidate_ids=[d.id for d in shown], selected_candidate_id=candidate.id if candidate else None, reason=body.reason, before=candidate.data if candidate else None, after=direction)
     if body.source == "edited":
         log_action(session, project_id, version.id, "direction_select", body.editor, displayed_candidate_ids=[d.id for d in shown], selected_candidate_id=candidate.id, reason=body.reason)
