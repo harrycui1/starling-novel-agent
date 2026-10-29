@@ -1,0 +1,109 @@
+{
+ "stage": "S0 输入与形式基线",
+ "book": "source.txt",
+ "title": "穿成全网群嘲明星，看我大心脏力挽狂澜",
+ "config": {
+  "target_words": 20000,
+  "free_chapters": 4,
+  "tags": "无",
+  "direction": "A",
+  "editor_note": "无",
+  "models": {
+   "s1": "deepseek/deepseek-v4.1-flash",
+   "s2": "deepseek/deepseek-v4.1-flash",
+   "s3": "deepseek/deepseek-v4.1-flash",
+   "s4": "deepseek/deepseek-v4.1-flash",
+   "s5a": "deepseek/deepseek-v4.1-flash",
+   "s5b": "deepseek/deepseek-v4.1-flash"
+  }
+ },
+ "baseline": {
+  "chapters": [
+   {
+    "words": 1228,
+    "dialogue_ratio": 0.233,
+    "para_avg": 17.3,
+    "last_line": "这分明就是几张不同照片强行拼接出来的工业垃圾。",
+    "ends_with_dialogue": false,
+    "index": 1
+   },
+   {
+    "words": 811,
+    "dialogue_ratio": 0.228,
+    "para_avg": 18.9,
+    "last_line": "“明天医院里的老太太，可能会不小心刷到一些很有意思的新闻。”",
+    "ends_with_dialogue": true,
+    "index": 2
+   },
+   {
+    "words": 1054,
+    "dialogue_ratio": 0.242,
+    "para_avg": 18.2,
+    "last_line": "我将胸针别在黑色风衣的暗褶处，开车去了夜色。",
+    "ends_with_dialogue": false,
+    "index": 3
+   },
+   {
+    "words": 998,
+    "dialogue_ratio": 0.314,
+    "para_avg": 17.2,
+    "last_line": "“你还是准备好，担心担心你自己吧。”",
+    "ends_with_dialogue": true,
+    "index": 4
+   },
+   {
+    "words": 938,
+    "dialogue_ratio": 0.253,
+    "para_avg": 17.7,
+    "last_line": "三封加密邮件，滑入了三家深度调查媒体主编的收件箱。",
+    "ends_with_dialogue": false,
+    "index": 5
+   },
+   {
+    "words": 1004,
+    "dialogue_ratio": 0.137,
+    "para_avg": 22.8,
+    "last_line": "我盯着这条热搜，眼睛微微眯起。",
+    "ends_with_dialogue": false,
+    "index": 6
+   },
+   {
+    "words": 1146,
+    "dialogue_ratio": 0.352,
+    "para_avg": 19.4,
+    "last_line": "来电显示，居然是严寒本人。",
+    "ends_with_dialogue": false,
+    "index": 7
+   },
+   {
+    "words": 1018,
+    "dialogue_ratio": 0.126,
+    "para_avg": 18.2,
+    "last_line": "“你现在立刻来一趟医院，你奶奶她……”",
+    "ends_with_dialogue": true,
+    "index": 8
+   },
+   {
+    "words": 898,
+    "dialogue_ratio": 0.081,
+    "para_avg": 21.4,
+    "last_line": "“你不是我的栀栀……对不对？”",
+    "ends_with_dialogue": true,
+    "index": 9
+   },
+   {
+    "words": 1058,
+    "dialogue_ratio": 0.237,
+    "para_avg": 18.2,
+    "last_line": "我转过身，大步向着光亮处走去，再也没有回头。",
+    "ends_with_dialogue": false,
+    "index": 10
+   }
+  ],
+  "total_words": 10153,
+  "median_words": 1011,
+  "dialogue_ratio": 0.223,
+  "para_avg": 18.7,
+  "pov": "第一人称"
+ }
+}

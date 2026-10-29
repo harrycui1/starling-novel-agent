@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>三模型对比</title>
+<style>
+:root{--bg:#f6f4ef;--paper:#fffdf8;--ink:#1f1d1a;--ink2:#57534c;--ink3:#8f8a80;--line:#e6e1d6;--soft:#efebe2;--rep:#f6d9d2;--rep-line:#b4432c;--tic:#fbecc8;--tic-line:#b7791f;
+ --serif:"Songti SC","Noto Serif SC",serif;--sans:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+@media (prefers-color-scheme:dark){:root{--bg:#161513;--paper:#1e1c19;--ink:#ece8df;--ink2:#b5afa3;--ink3:#7d786e;--line:#2f2c27;--soft:#26241f;--rep:#4a2620;--rep-line:#e07a5f;--tic:#3d3018;--tic-line:#e0a84a}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 var(--sans)}
+.top{position:sticky;top:0;z-index:2;background:var(--paper);border-bottom:1px solid var(--line);padding:12px 24px}
+.row{display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+.top b{font:600 16px var(--serif)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:none;padding:5px 12px;cursor:pointer;color:var(--ink2);font:inherit}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button.on{background:var(--ink);color:var(--paper)}
+.lab{font-size:12px;color:var(--ink3);margin-right:6px}
+.legend{font-size:12px;color:var(--ink3);display:flex;gap:14px;margin-left:auto;align-items:center}
+.legend span{padding:0 4px;border-radius:3px}
+.legend .r{background:var(--rep);border-bottom:2px solid var(--rep-line);color:var(--ink)}
+.legend .t{background:var(--tic);border-bottom:2px solid var(--tic-line);color:var(--ink)}
+.outline{margin-top:8px;font-size:13px;color:var(--ink2)}
+.outline em{font-style:normal;color:var(--ink3)}
+.cols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;padding:16px 24px 48px}
+.col{background:var(--paper);border:1px solid var(--line);border-radius:10px;min-width:0}
+.col .h{position:sticky;top:var(--top-h,96px);background:var(--paper);border-bottom:1px solid var(--line);padding:12px 18px;border-radius:10px 10px 0 0}
+.col .h b{font-size:15px}
+.col .m{font-size:12px;color:var(--ink3);margin-top:2px}
+.col .m .bad{color:var(--rep-line)}
+.prose{padding:18px 22px;font:16px/1.95 var(--serif)}
+.prose p{margin:0 0 .7em}
+mark.r{background:var(--rep);border-bottom:2px solid var(--rep-line);color:inherit}
+mark.t{background:var(--tic);border-bottom:2px solid var(--tic-line);color:inherit}
+.off mark{background:none;border:0}
+</style>
+</head>
+<body>
+<div class="top" id="top">
+ <div class="row">
+  <b>同一章，三个模型</b>
+  <span><span class="lab">章节</span><span class="seg" id="ch"></span></span>
+  <span><span class="lab">写法</span><span class="seg" id="var"></span></span>
+  <span><span class="lab">标注</span><span class="seg" id="hl"><button data-v="1" class="on">开</button><button data-v="0">关</button></span></span>
+  <span class="legend"><span class="r">和前文原样重复</span><span class="t">原作不用的口头禅</span></span>
+ </div>
+ <div class="outline" id="outline"></div>
+</div>
+<div class="cols" id="cols"></div>
+<script>
+const D=/*__DATA__*/null;
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const MODELS=[["deepseek/deepseek-v4.1-flash","DeepSeek v4.1 Flash"],["google/gemini-4-argon","Gemini 4 Argon"],["openai/gpt-6.1-sol","GPT 6.1 Sol"]];
+const VARS={A:"A 现状",B:"B 规则放末尾",C:"C 原作示范"};
+let ch=D.chapters[0],v="B",hl=true;
+const norm=s=>s.replace(/[“”‘’「」\s、：:—]/g,"");
+
+function mark(text,repeats){
+ const rep=new Set(repeats);
+ return text.split(/\n+/).filter(s=>s.trim()).map(line=>{
+  // 按和 run.sentences 相同的分隔符切片，命中重复的片段整段标红
+  const parts=line.split(/([。！？!?…，,；;]+)/);
+  let html=parts.map(p=>{const n=norm(p);let h=esc(p);
+   if(n.length>=8&&rep.has(n))return `<mark class="r">${h}</mark>`;
+   for(const w of D.ai_only)h=h.split(esc(w)).join(`<mark class="t">${esc(w)}</mark>`);
+   return h}).join("");
+  return `<p>${html}</p>`}).join("")}
+
+function render(){
+ const o=D.outline[ch];
+ document.getElementById("outline").innerHTML=`第 ${ch} 章「${esc(o.title)}」<em>　核心冲突：</em>${esc(o.conflict)}<em>　章尾：</em>${esc(o.hook)}`;
+ document.getElementById("cols").innerHTML=MODELS.map(([id,name])=>{
+  const r=D.results.find(x=>x.model===id&&x.variant===v&&x.chapter===ch);
+  if(!r)return `<div class="col"><div class="h"><b>${name}</b><div class="m">没有结果</div></div></div>`;
+  const tics=D.ai_only.reduce((n,w)=>n+r.text.split(w).length-1,0);
+  return `<div class="col"><div class="h"><b>${name}</b>
+   <div class="m">${r.words} 字（原作每章约 ${D.baseline.median}）· 对话 ${Math.round(r.dialogue*100)}%（原作 ${Math.round(D.baseline.dialogue*100)}%）· <span class="${r.repeats.length?"bad":""}">重复 ${r.repeats.length} 处</span> · 口头禅 ${tics} 处</div></div>
+   <div class="prose ${hl?"":"off"}">${mark(r.text,r.repeats)}</div></div>`}).join("");
+ document.documentElement.style.setProperty("--top-h",document.getElementById("top").offsetHeight+"px");
+}
+function seg(id,items,cur,set){
+ const el=document.getElementById(id);
+ el.innerHTML=items.map(([k,n])=>`<button data-v="${k}" class="${String(k)===String(cur)?"on":""}">${n}</button>`).join("");
+ el.onclick=e=>{const b=e.target.closest("button");if(!b)return;set(b.dataset.v);el.querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===b));render()}}
+seg("ch",D.chapters.map(c=>[c,`第 ${c} 章`]),ch,x=>ch=Number(x));
+seg("var",Object.entries(VARS),v,x=>v=x);
+document.getElementById("hl").onclick=e=>{const b=e.target.closest("button");if(!b)return;hl=b.dataset.v==="1";document.querySelectorAll("#hl button").forEach(x=>x.classList.toggle("on",x===b));render()};
+addEventListener("resize",render);
+render();
+</script>
+</body>
+</html>

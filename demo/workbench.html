@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>网文续写工作台</title>
+<style>
+:root{--bg:#f6f4ef;--paper:#fffdf8;--ink:#1f1d1a;--ink2:#57534c;--ink3:#8f8a80;--line:#e6e1d6;--soft:#efebe2;--accent:#b4432c;--accent-soft:#f6e3dc;--warn:#b7791f;--warn-soft:#fbf0d9;--ok:#3f7a4f;
+ --serif:"Songti SC","Noto Serif SC",serif;--sans:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+@media (prefers-color-scheme:dark){:root{--bg:#161513;--paper:#1e1c19;--ink:#ece8df;--ink2:#b5afa3;--ink3:#7d786e;--line:#2f2c27;--soft:#26241f;--accent:#e07a5f;--accent-soft:#3a241d;--warn:#e0a84a;--warn-soft:#352a17;--ok:#7fbf8e}}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.65 var(--sans);display:flex;flex-direction:column}
+button,input,textarea,select{font:inherit;color:inherit}
+.top{flex:none;display:flex;align-items:center;gap:24px;padding:0 20px;height:52px;background:var(--paper);border-bottom:1px solid var(--line)}
+.top b{font:600 15px var(--serif);white-space:nowrap}
+.steps{display:flex;gap:4px;margin:0 auto}
+.steps button{border:0;background:none;padding:6px 14px;white-space:nowrap;border-radius:16px;color:var(--ink3);cursor:pointer}
+.steps button span{display:inline-block;width:18px;height:18px;line-height:18px;border-radius:50%;background:var(--soft);font-size:11px;text-align:center;margin-right:6px}
+.steps button.reach{color:var(--ink2)}
+.steps button.on{background:var(--ink);color:var(--paper)}
+.steps button.on span{background:var(--paper);color:var(--ink)}
+.steps button[disabled]{cursor:default;opacity:.45}
+.top select{max-width:260px;border:1px solid var(--line);background:var(--paper);border-radius:6px;padding:4px 8px}
+.cols{flex:1;display:grid;grid-template-columns:minmax(220px,300px) minmax(0,1fr) minmax(220px,300px);min-height:0}
+.col{overflow:auto;padding:20px}
+.col.l{border-right:1px solid var(--line)}
+.col.r{border-left:1px solid var(--line);background:var(--paper)}
+.col.m{padding:24px 32px}
+@media (max-width:1100px){.col{padding:14px}.col.m{padding:16px 20px}.steps button{padding:6px 8px}.top{gap:12px}}
+h2{font:600 18px/1.4 var(--serif);margin:0 0 4px}
+h3{font-size:13px;font-weight:600;color:var(--ink2);margin:22px 0 8px}
+h3:first-child{margin-top:0}
+.hint{font-size:13px;color:var(--ink3);margin:0 0 16px}
+label.f{display:block;margin-bottom:12px;font-size:13px;color:var(--ink3)}
+label.f input,label.f textarea,label.f select{display:block;width:100%;margin-top:4px;border:1px solid var(--line);background:var(--paper);border-radius:6px;padding:6px 8px;color:var(--ink)}
+label.f textarea{resize:vertical;min-height:64px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+details.models summary{cursor:pointer;color:var(--ink3);font-size:13px;margin:8px 0}
+.btn{display:block;width:100%;border:1px solid var(--line);background:var(--paper);border-radius:8px;padding:9px 12px;cursor:pointer;margin-top:10px;text-align:center}
+.btn:hover{border-color:var(--ink3)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{filter:brightness(1.07)}
+.btn[disabled]{opacity:.45;cursor:default;filter:none}
+.btn.link{border:0;background:none;color:var(--ink3);padding:4px;margin-top:4px}
+.btn.link:hover{color:var(--accent)}
+.job{border-radius:8px;padding:10px 12px;background:var(--soft);font-size:13px;margin-bottom:14px}
+.job.err{background:var(--warn-soft);color:var(--warn)}
+.job .spin{display:inline-block;width:10px;height:10px;border:2px solid var(--ink3);border-top-color:transparent;border-radius:50%;animation:s 1s linear infinite;margin-right:8px;vertical-align:-1px}
+@keyframes s{to{transform:rotate(360deg)}}
+.checks{font-size:13px}
+.checks .bad{color:var(--warn)}
+.checks .ok{color:var(--ok)}
+.empty{color:var(--ink3);padding:40px 0;text-align:center}
+table{width:100%;border-collapse:collapse}
+td,th{text-align:left;padding:7px 12px 7px 0;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-weight:500;color:var(--ink3);font-size:13px}
+td.n{color:var(--ink3);white-space:nowrap}
+.drop{border:1.5px dashed var(--line);border-radius:10px;padding:24px 12px;text-align:center;color:var(--ink3);cursor:pointer;background:var(--paper)}
+.drop:hover{border-color:var(--ink3)}
+/* 方向卡片 */
+.dirs{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:16px 18px;cursor:pointer;display:flex;flex-direction:column}
+.card:hover{border-color:var(--ink3)}
+.card.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.card .k{font-size:12px;color:var(--ink3)}
+.card h4{font:600 17px/1.4 var(--serif);margin:4px 0 6px}
+.card p{margin:0 0 10px;color:var(--ink2)}
+.card dl{display:grid;grid-template-columns:44px 1fr;gap:4px 8px;margin:0;font-size:13px;border-top:1px solid var(--line);padding-top:10px}
+.card dt{color:var(--ink3)}.card dd{margin:0}
+.card .bad{margin-top:8px;font-size:12px;color:var(--warn)}
+.card .el{display:grid;grid-template-columns:56px 1fr;gap:4px 8px;margin:0;font-size:13px;border-top:1px solid var(--line);padding-top:10px}
+.card .el dt{color:var(--ink3)}.card .el dd{margin:0}
+.card .el b{font-weight:600}
+.pill{display:inline-block;font-size:11px;line-height:17px;padding:0 6px;border-radius:9px;background:var(--soft);color:var(--ink3);margin-left:4px;white-space:nowrap}
+.pill.new{background:var(--accent-soft);color:var(--accent)}
+.card textarea{width:100%;min-height:110px;border:1px solid var(--line);border-radius:6px;padding:8px;background:var(--bg);resize:vertical;margin-top:4px}
+/* 细纲 */
+.dch{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:12px}
+.dch .h{display:flex;gap:10px;align-items:center;margin-bottom:8px}
+.dch .h span{color:var(--ink3);font-size:13px;white-space:nowrap}
+.dch .h input{flex:1;font-weight:600;border:0;border-bottom:1px solid transparent;background:none;padding:2px 0}
+.dch .h input:focus,.dch textarea:focus,.dch .hook input:focus{outline:0;border-color:var(--accent)}
+.dch .lab{font-size:12px;color:var(--ink3);margin-top:6px}
+.dch textarea{width:100%;border:1px solid var(--line);border-radius:6px;padding:6px 8px;background:var(--bg);resize:vertical}
+.dch .hook{display:flex;gap:8px}
+.dch .hook select{border:1px solid var(--line);border-radius:6px;background:var(--bg);padding:4px}
+.dch .hook input{flex:1;border:1px solid var(--line);border-radius:6px;padding:6px 8px;background:var(--bg)}
+.dch.bad{border-color:var(--warn)}
+/* 正文 */
+.chl button{display:flex;justify-content:space-between;width:100%;border:0;background:none;text-align:left;padding:6px 10px;border-radius:6px;cursor:pointer;color:var(--ink2)}
+.chl button:hover{background:var(--soft)}
+.chl button.on{background:var(--ink);color:var(--paper)}
+.chl button .s{font-size:12px;color:var(--ink3)}
+.chl button.on .s{color:inherit;opacity:.8}
+.chl button.todo{color:var(--ink3)}
+.chl .w{color:var(--warn)}
+.editor{display:flex;flex-direction:column;height:100%}
+.editor .meta{font-size:13px;color:var(--ink3);margin:4px 0 12px}
+.editor textarea{flex:1;width:100%;border:1px solid var(--line);border-radius:10px;background:var(--paper);padding:28px 36px;font:17px/2 var(--serif);resize:none}
+.editor textarea:focus{outline:0;border-color:var(--ink3)}
+.outline{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:16px 20px;color:var(--ink2)}
+.progress{height:6px;background:var(--soft);border-radius:3px;overflow:hidden;margin:6px 0 4px}
+.progress i{display:block;height:100%;background:var(--accent)}
+/* 多模型对比 */
+.cols.wide{grid-template-columns:minmax(0,1fr)}
+.cols.wide .col.l,.cols.wide .col.r{display:none}
+.cmphead{display:flex;align-items:baseline;gap:16px;margin-bottom:14px}
+.cmphead .btn{width:auto;margin:0}
+.cmpgrid{display:grid;gap:14px;align-items:start}
+.cand{background:var(--paper);border:1px solid var(--line);border-radius:10px;min-width:0}
+.cand.cur{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.cand .h{position:sticky;top:0;background:var(--paper);border-bottom:1px solid var(--line);padding:12px 16px;border-radius:10px 10px 0 0}
+.cand .h b{font-size:15px}
+.cand .h .m{font-size:12px;color:var(--ink3);margin:2px 0 8px}
+.cand .h .m .bad{color:var(--warn)}
+.cand .h .btn{margin:0;padding:6px 10px}
+.cand .prose{padding:16px 20px;font:16px/1.95 var(--serif)}
+.cand .prose p{margin:0 0 .7em}
+mark.r{background:var(--accent-soft);border-bottom:2px solid var(--accent);color:inherit}
+mark.t{background:var(--warn-soft);border-bottom:2px solid var(--warn);color:inherit}
+.legend{font-size:12px;color:var(--ink3);margin-left:auto;display:flex;gap:12px}
+.legend mark{padding:0 4px}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:8px 16px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.on{opacity:1}
+</style>
+</head>
+<body>
+<div class="top"><b>网文续写工作台</b><nav class="steps" id="steps"></nav><select id="proj"></select></div>
+<div class="cols"><aside class="col l" id="L"></aside><main class="col m" id="M"></main><aside class="col r" id="R"></aside></div>
+<div class="toast" id="toast"></div>
+<input type="file" id="file" accept=".txt,text/plain" hidden>
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const N=x=>Number(x)||0,pct=x=>Math.round(N(x)*100)+"%";
+const STRAT={steady:"稳妥",deepen:"深挖",alternate:"换路",custom:"自定义"};
+const dirLabel=k=>STRAT[k]||("方向 "+k);
+const ELEMENTS=["对手","交锋方式","反转","结局"];
+const MOVE_MODES={library_first:"库优先，允许 AI 补充",library_only:"只用招式库",none:"不用招式库"};
+const moveModeField=c=>`<label class="f">招式库<select id="movemode">${Object.entries(MOVE_MODES).map(([k,v])=>`<option value="${k}" ${(c.move_mode||"library_first")===k?"selected":""}>${v}</option>`).join("")}</select></label>`;
+const HOOK={event:"事件",dialogue:"对话",reflection:"感悟"};
+const STEPS=[["upload","上传"],["directions","选方向"],["detail","细纲"],["writing","正文"]];
+
+let pid=localStorage.getItem("wb_pid")||"",S=null,G=null,view="upload";
+let sel={mode:"pick",strategy:"",idea:""},detailDirty=false,cur=0,chData=null,chDirty=false,timer=null,instr="",cmp=null,cmpOpen=false;
+
+async function api(method,path,body){
+ const r=await fetch(path,{method,headers:{"Content-Type":"application/json"},body:body?JSON.stringify(body):undefined});
+ const j=await r.json().catch(()=>({}));
+ if(!r.ok)throw new Error(j.error||r.statusText);return j}
+function toast(msg){const t=$("#toast");t.textContent=msg;t.classList.add("on");clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove("on"),2600)}
+async function act(fn){try{await fn()}catch(e){toast(e.message)}}
+const stepIdx=s=>s==="done"?3:STEPS.findIndex(x=>x[0]===s);
+
+// ---------- 数据 ----------
+async function boot(){
+ G=await api("GET","/api/projects");
+ renderProj();
+ if(pid&&G.projects.some(p=>p.id===pid))await load(true);else{pid="";S=null;view="upload";render()}
+}
+async function load(jump){
+ S=await api("GET","/api/p/"+pid);
+ if(jump)view=STEPS[stepIdx(S.config.step)][0];
+ const g=S.gate1;if(g&&!sel.strategy&&sel.mode==="pick")sel=g.mode==="custom"?{mode:"custom",strategy:"",idea:g.idea}:{mode:"pick",strategy:g.selected,idea:""};
+ if(view==="writing"&&!cur&&S.plan)cur=firstOpen();
+ if(view==="writing"&&cur&&!chDirty&&S.written.some(w=>w.index===cur)&&(!chData||chData.index!==cur))await openChapter(cur,false);
+ render();
+ clearTimeout(timer);if(S.job.running)timer=setTimeout(poll,1500);
+}
+async function poll(){
+ const was=S.job.running,step=S.config.step;
+ S=await api("GET","/api/p/"+pid);
+ if(was&&!S.job.running){if(S.job.error)toast("出错了："+S.job.error);if(S.config.step!==step){view=STEPS[stepIdx(S.config.step)][0];detailDirty=false;if(view==="writing")cur=firstOpen()}}
+ if(was&&!S.job.running&&view==="writing"&&!chDirty)chData=null; // 重写完要重新取这一章
+ if(cmpOpen&&(S.job.name==="compare"||was))await loadCmp();
+ const keepMid=(view==="detail"&&detailDirty)||(view==="writing"&&chDirty&&!cmpOpen);
+ if(view==="writing"&&!chDirty&&cur&&S.written.some(w=>w.index===cur)&&(!chData||chData.index!==cur))await openChapter(cur,false);
+ renderSteps();renderL();renderR();if(!keepMid)renderM();
+ if(S.job.running)timer=setTimeout(poll,1500);
+}
+function firstOpen(){if(!S.plan)return 0;const w=new Set(S.written.map(x=>x.index));for(let i=S.plan.first;i<=S.plan.last;i++)if(!w.has(i))return i===S.plan.first?i:i-1;return S.plan.first}
+
+// ---------- 顶栏 ----------
+function renderProj(){
+ $("#proj").innerHTML=`<option value="">＋ 新建项目</option>`+G.projects.map(p=>`<option value="${p.id}" ${p.id===pid?"selected":""}>${esc(p.title)} · ${esc(p.created)}</option>`).join("")}
+$("#proj").onchange=e=>act(async()=>{pid=e.target.value;localStorage.setItem("wb_pid",pid);cur=0;chData=null;detailDirty=chDirty=false;sel={mode:"pick",strategy:"",idea:""};if(pid)await load(true);else{S=null;view="upload";render()}});
+function renderSteps(){
+ const reach=S?stepIdx(S.config.step):0;
+ $("#steps").innerHTML=STEPS.map(([k,n],i)=>`<button data-step="${k}" class="${k===view?"on":""} ${i<=reach?"reach":""}" ${i>reach?"disabled":""}><span>${i+1}</span>${n}</button>`).join("")}
+document.addEventListener("click",e=>{const b=e.target.closest("[data-step]");if(b&&!b.disabled){view=b.dataset.step;if(view==="writing"&&!cur)cur=firstOpen();S?act(()=>load()):render()}});
+function render(){$(".cols").classList.toggle("wide",cmpOpen&&view==="writing");renderSteps();renderL();renderM();renderR()}
+
+// ---------- 通用部件 ----------
+function jobBox(){if(!S)return"";const j=S.job;
+ if(j.running)return `<div class="job"><span class="spin"></span>${esc(j.message)}</div>`;
+ if(j.error)return `<div class="job err">上次任务出错：${esc(j.error)}</div>`;return""}
+function modelFields(cfg,stages,def){
+ return `<details class="models"><summary>各阶段模型（留空用 ${esc(def||"默认")}）</summary>${Object.entries(stages).map(([s,n])=>`<label class="f">${esc(n)}<input data-model="${s}" value="${esc(cfg.models?.[s]||"")}" placeholder="${esc(def)}"></label>`).join("")}</details>`}
+function readModels(){const m={};document.querySelectorAll("[data-model]").forEach(i=>m[i.dataset.model]=i.value.trim());return m}
+function checksList(list,limit){if(!list||!list.length)return `<div class="checks muted">没有检查项</div>`;const bad=list.filter(c=>!c.pass);
+ return `<div class="checks"><div class="${bad.length?"bad":"ok"}">代码检查 ${list.length-bad.length}/${list.length} 通过</div>${bad.slice(0,limit??99).map(c=>`<div class="bad">✗ ${esc(c.name)}</div>`).join("")}</div>`}
+const busy=()=>S&&S.job.running;
+async function saveModels(){if(S&&document.querySelector("[data-model]"))await api("PUT",`/api/p/${pid}/config`,{models:readModels()})}
+
+// ---------- 左栏 ----------
+function renderL(){
+ const L=$("#L");
+ if(view==="upload"){
+  const c=S?S.config:G.default,locked=S&&(stepIdx(S.config.step)>0||busy());
+  L.innerHTML=`<h3>原文</h3>${S?`<div style="margin-bottom:16px">${esc(S.config.filename)}<div class="hint" style="margin:0">${S.chapters.length} 章 · ${S.baseline.total_words} 字</div></div>`:`<div class="drop" id="drop">点击选择 TXT，或拖到这里<br><span style="font-size:12px">章节标题形如「第1章」</span></div>`}
+  <h3>参数</h3>
+  <div class="row2"><label class="f">续写字数<input id="target" type="number" value="${c.target}" ${locked?"disabled":""}></label><label class="f">免费章数<input id="free" type="number" value="${c.free}" ${locked?"disabled":""}></label></div>
+  <label class="f">题材标签<input id="tags" value="${esc(c.tags)}" placeholder="可不填" ${locked?"disabled":""}></label>
+  <label class="f">给 AI 的补充要求<textarea id="note" placeholder="可不填" ${locked?"disabled":""}>${esc(c.note)}</textarea></label>
+  ${moveModeField(c)}
+  ${modelFields(c,G.stages,G.default_model)}`;
+  const d=$("#drop");if(d){d.onclick=()=>$("#file").click();d.ondragover=e=>e.preventDefault();d.ondrop=e=>{e.preventDefault();upload(e.dataTransfer.files[0])}}
+  return}
+ if(!S)return L.innerHTML="";
+ if(view==="directions"){
+  L.innerHTML=`<h3>原文</h3><div>${esc(S.config.title)}</div><div class="hint">${S.chapters.length} 章 · ${S.baseline.total_words} 字 · 续写 ${S.config.target} 字</div>
+  <label class="f">给 AI 的补充要求<textarea id="note" placeholder="可不填。改了之后点「重新生成三个方向」才生效">${esc(S.config.note)}</textarea></label>
+  ${moveModeField(S.config)}<p class="hint" style="margin-top:-6px">改了之后点「重新生成三个方向」才生效。</p>
+  ${modelFields(S.config,S.stages,S.default_model)}`;return}
+ const g=S.gate1,d=(S.directions?.list||[]).find(x=>x.strategy===g?.selected)||{};
+ const dirBox=`<h3>选定的方向</h3><div style="font:600 16px var(--serif)">${esc(d.title)}</div><div class="hint" style="margin:2px 0 8px">${esc(dirLabel(d.strategy))}${g?.mode==="auto"?" · 模型自动选择":""}</div>
+  <div style="color:var(--ink2)">${esc(d.logline)}</div>
+  ${g?.reason?`<div class="hint" style="margin-top:8px">选择理由：${esc(g.reason)}</div>`:""}${g?.idea?`<div class="hint" style="margin-top:8px">你的想法：${esc(g.idea)}</div>`:""}
+  ${S.plan?`<div class="hint" style="margin-top:8px">保留原作前 ${S.plan.cut} 章，续写第 ${S.plan.first}～${S.plan.last} 章</div>`:""}`;
+ if(view==="detail"){L.innerHTML=dirBox+modelFields(S.config,S.stages,S.default_model);return}
+ // writing
+ const w=Object.fromEntries(S.written.map(x=>[x.index,x])),det=Object.fromEntries((S.detail?.chapters||[]).map(c=>[N(c.index),c]));
+ let list="";if(S.plan)for(let i=S.plan.first;i<=S.plan.last;i++){const x=w[i],writing=S.job.running&&S.job.chapter===i;
+  list+=`<button data-ch="${i}" class="${i===cur?"on":""} ${x?"":"todo"}"><span>第 ${i} 章 ${esc(det[i]?.title||"")}</span><span class="s">${writing?"写作中":x?`${x.words}字${x.edited?" ✎":""}${x.bad?' <b class="w">●</b>':""}`:""}</span></button>`}
+ L.innerHTML=`<h3>章节</h3><div class="chl">${list}</div>
+ <h3>写法</h3><label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--ink2);cursor:pointer"><input type="checkbox" id="autorev" ${S.config.auto_revise?"checked":""} style="margin-top:4px">检查没通过时，自动按检查结果改一次（关闭时为直出）</label>
+ ${modelFields(S.config,S.stages,S.default_model)}`;
+ $("#autorev").onchange=e=>act(async()=>{S.config=await api("PUT",`/api/p/${pid}/config`,{auto_revise:e.target.checked})})}
+document.addEventListener("click",e=>{const b=e.target.closest("[data-ch]");if(b)act(()=>openChapter(N(b.dataset.ch),true))});
+$("#file").onchange=e=>upload(e.target.files[0]);
+
+async function upload(f){if(!f)return;act(async()=>{
+ const text=await f.text();
+ const r=await api("POST","/api/projects",{filename:f.name.replace(/\.txt$/i,""),text,target:N($("#target").value),free:N($("#free").value),tags:$("#tags").value,note:$("#note").value,models:readModels(),move_mode:$("#movemode").value});
+ pid=r.id;localStorage.setItem("wb_pid",pid);G=await api("GET","/api/projects");renderProj();await load(true)})}
+
+// ---------- 中栏 ----------
+function renderM(){
+ const M=$("#M");
+ if(view==="upload"){
+  if(!S)return M.innerHTML=`<div class="empty">上传原文后，这里显示解析出的章节</div>`;
+  M.innerHTML=`<h2>解析出的章节</h2><p class="hint">共 ${S.chapters.length} 章，每章约 ${S.baseline.median_words} 字，对话占 ${pct(S.baseline.dialogue_ratio)}，${esc(S.baseline.pov)}。确认切章没问题再开始分析。</p>
+  <table><tr><th>章</th><th>字数</th><th>开头</th></tr>${S.chapters.map(c=>`<tr><td class="n">第 ${c.index} 章</td><td class="n">${c.words}</td><td>${esc(c.head)}</td></tr>`).join("")}</table>`;return}
+ if(view==="directions"){
+  if(!S.directions)return M.innerHTML=`<div class="empty">${busy()?esc(S.job.message):"还没有方向"}</div>`;
+  const ck=S.directions.checks||[];
+  const card=d=>{const bad=ck.filter(c=>!c.pass&&c.name.startsWith(`[${d.strategy}]`));const on=sel.mode==="pick"&&sel.strategy===d.strategy;
+   const el=d.elements||{},fb=(d.foreshadow_backfill||[]).length;
+   const rows=Object.keys(el).length?ELEMENTS.map(k=>{const e=el[k]||{};return `<dt>${k}</dt><dd><b>${esc(e.name)}</b>${e.origin?`<span class="pill">${esc(e.origin)}</span>`:""}${e.move_id?"":'<span class="pill new">AI 新想法</span>'}<br>${esc(e.detail)}</dd>`}).join("")
+    :`<dt>新冲突</dt><dd>${esc(d.second_conflict)}</dd><dt>结局</dt><dd>${esc(d.final_highlight)}</dd>`;
+   return `<div class="card ${on?"on":""}" data-pick="${esc(d.strategy)}"><div class="k">${esc(dirLabel(d.strategy))}</div><h4>${esc(d.title)}</h4><p>${esc(d.logline)}</p>
+   <dl class="el"><dt>原文</dt><dd>保留前 ${N(d.cut_after_chapter)} 章（${pct(d.kept_ratio)}）${fb?`，补 ${fb} 处伏笔`:""}</dd>${rows}</dl>
+   ${bad.length?`<div class="bad">${bad.map(c=>"✗ "+esc(c.name.replace(/^\[\w+\]\s*/,""))).join("<br>")}</div>`:""}</div>`};
+  M.innerHTML=`<h2>选一个续写方向</h2><p class="hint">三个方向由 AI 生成；也可以自己写一个想法，或者让 AI 替你选。</p>
+  <div class="dirs">${S.directions.list.filter(d=>d.strategy!=="custom").map(card).join("")}
+   <div class="card ${sel.mode==="custom"?"on":""}" data-mode="custom"><div class="k">自定义</div><h4>我自己写</h4><p>写一句想法，AI 把它补成完整方向。</p><textarea id="idea" placeholder="例如：严寒入狱后，他背后的资本找上门……">${esc(sel.idea||S.directions.custom_idea)}</textarea></div>
+   <div class="card ${sel.mode==="auto"?"on":""}" data-mode="auto"><div class="k">自动</div><h4>让 AI 选</h4><p>按类型是否守住、新冲突是否有依据、结局是否更强等标准，从上面三个里选一个，并说明理由。</p></div>
+  </div>${S.directions.notes?`<p class="hint" style="margin-top:16px">AI 的说明：${esc(S.directions.notes)}</p>`:""}`;
+  $("#idea").oninput=e=>{sel.idea=e.target.value;if(sel.mode!=="custom"){sel.mode="custom";document.querySelectorAll(".card").forEach(c=>c.classList.toggle("on",c.dataset.mode==="custom"));renderR()}};
+  return}
+ if(view==="detail"){
+  if(!S.detail||(busy()&&S.job.name!=="write"))return M.innerHTML=`<div class="empty">${busy()?esc(S.job.message):"还没有细纲"}</div>`;
+  const bad=new Set((S.detail.checks||[]).filter(c=>!c.pass).map(c=>(c.name.match(/^第 (\d+) 章/)||[])[1]).filter(Boolean).map(Number));
+  M.innerHTML=`<h2>细纲</h2><p class="hint">每章写什么、在哪收尾。直接改，改完点右边「保存修改」或直接确认。事件一行一个。</p>
+  <div id="dlist">${S.detail.chapters.map((c,i)=>`<div class="dch ${bad.has(N(c.index))?"bad":""}" data-i="${i}">
+   <div class="h"><span>第 ${N(c.index)} 章</span><input data-f="title" value="${esc(c.title)}"></div>
+   <div class="lab">核心冲突</div><textarea data-f="core_conflict" rows="2">${esc(c.core_conflict)}</textarea>
+   <div class="lab">事件</div><textarea data-f="events" rows="${Math.max(3,(c.events||[]).length)}">${esc((c.events||[]).map(e=>e.content).join("\n"))}</textarea>
+   <div class="lab">章尾</div><div class="hook"><select data-f="hook_type">${Object.entries(HOOK).map(([k,v])=>`<option value="${k}" ${c.ending_hook?.type===k?"selected":""}>${v}</option>`).join("")}</select><input data-f="hook" value="${esc(c.ending_hook?.content)}"></div>
+  </div>`).join("")}</div>`;
+  $("#dlist").oninput=()=>{if(!detailDirty){detailDirty=true;renderR()}};return}
+ // writing
+ if(!S.plan)return M.innerHTML=`<div class="empty">${busy()?esc(S.job.message):"还没有正文"}</div>`;
+ if(cmpOpen)return renderCompare(M);
+ const det=(S.detail?.chapters||[]).find(c=>N(c.index)===cur)||{};
+ if(!chData||chData.index!==cur){
+  M.innerHTML=`<h2>第 ${cur} 章 ${esc(det.title)}</h2><p class="hint">${S.job.running&&S.job.chapter===cur?"正在写这一章……":"这一章还没写，下面是它的细纲。"}</p>
+  <div class="outline"><b>核心冲突</b>：${esc(det.core_conflict)}<ol>${(det.events||[]).map(e=>`<li>${esc(e.content)}</li>`).join("")}</ol><b>章尾</b>：${esc(det.ending_hook?.content)}</div>`;return}
+ const st=chData.stats||{};
+ M.innerHTML=`<div class="editor"><h2>第 ${cur} 章 ${esc(det.title)}</h2><div class="meta">${N(st.words)} 字（原作每章约 ${S.baseline.median_words}）· 对话 ${pct(st.dialogue_ratio)}（原作 ${pct(S.baseline.dialogue_ratio)}）${chData.edited?" · 已手改":""}</div>
+ <textarea id="chtext">${esc(chData.text)}</textarea></div>`;
+ $("#chtext").oninput=()=>{if(!chDirty){chDirty=true;renderR()}}}
+document.addEventListener("click",e=>{
+ if(e.target.closest("textarea"))return;
+ const c=e.target.closest("[data-pick],[data-mode]");if(!c||view!=="directions")return;
+ sel=c.dataset.pick?{...sel,mode:"pick",strategy:c.dataset.pick}:{...sel,mode:c.dataset.mode};
+ if(sel.mode==="custom")setTimeout(()=>$("#idea")?.focus());
+ document.querySelectorAll(".card").forEach(x=>x.classList.toggle("on",x===c));renderR()});
+
+async function loadCmp(){cmp=await api("GET",`/api/p/${pid}/compare/${cur}`)}
+const norm=s=>s.replace(/[“”‘’「」\s、：:—]/g,"");
+function marked(text,repeats){
+ const rep=new Set(repeats||[]);
+ return text.split(/\n+/).filter(s=>s.trim()).map(line=>`<p>${line.split(/([。！？!?…，,；;]+)/).map(part=>{
+  const n=norm(part);let h=esc(part);
+  if(n.length>=8&&rep.has(n))return `<mark class="r">${h}</mark>`;
+  for(const w of S.ai_tics)h=h.split(esc(w)).join(`<mark class="t">${esc(w)}</mark>`);
+  return h}).join("")}</p>`).join("")}
+function renderCompare(M){
+ const det=(S.detail?.chapters||[]).find(c=>N(c.index)===cur)||{};
+ const list=cmp?.candidates||[],running=busy()&&S.job.name==="compare";
+ const curModel=chData?.adopted_from;
+ const n=Math.max(list.length,running?S.compare_models.length:1);
+ const col=c=>{const st=c.stats||{},tics=S.ai_tics.reduce((k,w)=>k+c.text.split(w).length-1,0),rep=st.style?.repeats||[];
+  const isCur=curModel===c.model;
+  return `<div class="cand ${isCur?"cur":""}"><div class="h"><b>${esc(c.model.split("/")[1])}</b>
+   <div class="m">${N(st.words)} 字 · 对话 ${pct(st.dialogue_ratio)} · <span class="${rep.length?"bad":""}">重复 ${rep.length}</span> · 口头禅 ${tics} · ${Math.round(N(c.seconds))} 秒${c.cost!=null?` · $${N(c.cost).toFixed(3)}`:""}</div>
+   ${isCur?`<button class="btn" disabled>当前正文用的是这一版</button>`:`<button class="btn primary" data-adopt="${esc(c.model)}" ${busy()?"disabled":""}>采用这一版</button>`}</div>
+   <div class="prose">${marked(c.text,rep)}</div></div>`};
+ const pending=running?S.compare_models.filter(m=>!list.some(c=>c.model===m)).map(m=>`<div class="cand"><div class="h"><b>${esc(m.split("/")[1])}</b><div class="m"><span class="spin" style="display:inline-block;width:9px;height:9px;border:2px solid var(--ink3);border-top-color:transparent;border-radius:50%;animation:s 1s linear infinite"></span> 正在写……</div></div></div>`).join(""):"";
+ M.innerHTML=`<div class="cmphead"><button class="btn link" id="cmpback">← 返回编辑</button><h2>第 ${cur} 章 ${esc(det.title)} · 多模型对比</h2>
+  <span class="legend"><span><mark class="r">和前文原样重复</mark></span><span><mark class="t">原作不用的口头禅</mark></span></span></div>
+  <p class="hint">同样的前文和细纲，每个模型各写一次。${chData?(curModel?`当前正文采用的是 ${esc(curModel.split("/")[1])}。`:"当前正文是原来写的那一版，采用后可以在编辑页恢复。"):"这一章还没写，采用后就是这一章的正文。"}</p>
+  ${S.job.error&&!running?`<div class="job err">${esc(S.job.error)}</div>`:""}
+  <div class="cmpgrid" style="grid-template-columns:repeat(${n},minmax(0,1fr))">${list.map(col).join("")}${pending}</div>
+  ${!list.length&&!running?`<div class="empty">还没有对比结果</div>`:""}`;
+ $("#cmpback").onclick=()=>{cmpOpen=false;render()};
+ M.querySelectorAll("[data-adopt]").forEach(b=>b.onclick=()=>act(async()=>{
+  if(chDirty&&!confirm("这一章有没保存的手改，采用后会被替换，继续吗？"))return;chDirty=false;
+  await api("POST",`/api/p/${pid}/adopt`,{chapter:cur,model:b.dataset.adopt});chData=null;await load();toast("已采用 "+b.dataset.adopt.split("/")[1])}));
+}
+
+function readDetail(){
+ return [...document.querySelectorAll(".dch")].map(el=>{const o=S.detail.chapters[N(el.dataset.i)],f=k=>el.querySelector(`[data-f="${k}"]`).value;
+  const lines=f("events").split("\n").map(s=>s.trim()).filter(Boolean);
+  return {...o,title:f("title").trim(),core_conflict:f("core_conflict").trim(),
+   events:lines.map((s,i)=>({...(o.events||[])[i],content:s})),ending_hook:{...o.ending_hook,type:f("hook_type"),content:f("hook").trim()}}})}
+
+async function openChapter(i,user){
+ if(chDirty&&chData)await saveChapter();
+ if(cur!==i){cmp=null;cmpOpen=false}
+ cur=i;chData=null;
+ if(S.written.some(w=>w.index===i)){chData={index:i,...await api("GET",`/api/p/${pid}/chapter/${i}`)};instr=chData.suggestion||""}
+ if(user){renderL();renderM();renderR()}}
+async function saveChapter(){
+ const t=$("#chtext");if(!t||!chData)return;
+ chData={index:chData.index,...await api("PUT",`/api/p/${pid}/chapter/${chData.index}`,{text:t.value})};chDirty=false;
+ S=await api("GET","/api/p/"+pid)}
+
+// ---------- 右栏 ----------
+function renderR(){
+ const R=$("#R");
+ if(view==="upload"){
+  const started=S&&(stepIdx(S.config.step)>0||busy());
+  R.innerHTML=`<h3>下一步</h3>${jobBox()}<p class="hint">开始分析后，AI 会先读懂原文，再给出三个续写方向，大约需要三四分钟。</p>
+  <button class="btn primary" id="go" ${!S||started?"disabled":""}>${started?"已开始分析":"开始分析"}</button>
+  ${S&&stepIdx(S.config.step)>0?`<button class="btn" data-step="directions">去选方向 →</button>`:""}`;
+  $("#go").onclick=()=>act(async()=>{await api("POST",`/api/p/${pid}/analyze`,{target:N($("#target").value),free:N($("#free").value),tags:$("#tags").value,note:$("#note").value,models:readModels()});await load()});return}
+ if(!S)return R.innerHTML="";
+ if(view==="directions"){
+  const d=(S.directions?.list||[]).find(x=>x.strategy===sel.strategy);
+  const label=sel.mode==="auto"?"让 AI 选":sel.mode==="custom"?"自定义方向":d?`「${d.title}」`:"";
+  const ok=!busy()&&S.directions&&(sel.mode==="auto"||(sel.mode==="custom"&&sel.idea.trim())||(sel.mode==="pick"&&d));
+  const later=stepIdx(S.config.step)>1;
+  R.innerHTML=`<h3>确认方向</h3>${jobBox()}
+  <p class="hint">${label?`已选：${esc(label)}`:"先在中间选一个"}。确认后 AI 会先排大纲，再出逐章细纲，大约需要五六分钟。</p>
+  ${later?`<p class="hint" style="color:var(--warn)">重新确认会清掉已有的细纲和正文。</p>`:""}
+  <button class="btn primary" id="go" ${ok?"":"disabled"}>确认，生成细纲</button>
+  <button class="btn" id="regen" ${busy()?"disabled":""}>重新生成三个方向</button>
+  ${S.directions?`<h3>代码检查</h3>${checksList(S.directions.checks,0)}`:""}`;
+  $("#go").onclick=()=>act(async()=>{if(later&&!confirm("会清掉已有的细纲和正文，继续吗？"))return;
+   await api("POST",`/api/p/${pid}/choose`,{...sel,note:$("#note").value,models:readModels()});await load()});
+  $("#regen").onclick=()=>act(async()=>{if(later&&!confirm("会清掉已有的细纲和正文，继续吗？"))return;sel={mode:"pick",strategy:"",idea:sel.idea};
+   await api("POST",`/api/p/${pid}/directions`,{note:$("#note").value,models:readModels()});await load()});return}
+ if(view==="detail"){
+  const later=stepIdx(S.config.step)>2;
+  R.innerHTML=`<h3>确认细纲</h3>${jobBox()}
+  ${S.detail?checksList(S.detail.checks):""}
+  <p class="hint" style="margin-top:14px">确认后先往原文里补伏笔，然后从第 ${S.plan?.first} 章开始一章接一章写，中途可以停。</p>
+  ${later?`<p class="hint" style="color:var(--warn)">重新确认会清掉已写的正文。</p>`:""}
+  <button class="btn primary" id="go" ${busy()||!S.detail?"disabled":""}>确认细纲，开始写正文</button>
+  <button class="btn" id="save" ${detailDirty?"":"disabled"}>保存修改</button>
+  <button class="btn" id="regen" ${busy()?"disabled":""}>重新生成细纲</button>`;
+  $("#save").onclick=()=>act(async()=>{const r=await api("PUT",`/api/p/${pid}/detail`,{chapters:readDetail()});detailDirty=false;S=await api("GET","/api/p/"+pid);render();toast(`已保存，检查 ${r.checks.filter(c=>c.pass).length}/${r.checks.length} 通过`)});
+  $("#go").onclick=()=>act(async()=>{if(later&&!confirm("会清掉已写的正文，继续吗？"))return;
+   await api("POST",`/api/p/${pid}/confirm`,{chapters:detailDirty?readDetail():null,models:readModels()});detailDirty=false;await load()});
+  $("#regen").onclick=()=>act(async()=>{if(!confirm(detailDirty?"未保存的修改会丢掉，继续吗？":"重新生成细纲？"))return;detailDirty=false;
+   await api("POST",`/api/p/${pid}/detail`,{models:readModels()});await load()});return}
+ // writing
+ if(!S.plan)return R.innerHTML=jobBox();
+ const total=S.plan.last-S.plan.first+1,done=S.written.length,all=done>=total,running=busy();
+ const writing=running&&["write","rewrite","revise"].includes(S.job.name);
+ R.innerHTML=`<h3>写作进度</h3>${jobBox()}
+ <div class="progress"><i style="width:${done/total*100}%"></i></div><div class="hint">${done} / ${total} 章</div>
+ ${running&&S.job.name==="write"?`<button class="btn" id="stop">停止</button>`:all?"":`<button class="btn primary" id="cont" ${running?"disabled":""}>${done?"继续写":"开始写"}</button>`}
+ <h3>本章</h3>${chData?checksList(chData.checks):`<div class="hint">还没写</div>`}
+ ${chData?`${chData.auto_revised?`<p class="hint" style="margin:8px 0 0">写完后按检查结果自动改过一次。</p>`:""}
+  <button class="btn" id="save" ${chDirty?"":"disabled"}>保存手改</button>
+  <h3>按意见修改</h3><label class="f" style="margin:0"><textarea id="instr" rows="5" placeholder="写修改意见，例如：删掉最后三段感慨，章尾停在电话响起">${esc(instr)}</textarea></label>
+  <button class="btn" id="rev" ${running?"disabled":""}>按意见修改</button>
+  ${chData.has_previous?`<button class="btn link" id="restore" ${running?"disabled":""}>恢复修改前的版本</button>`:""}
+  <button class="btn link" id="rw" ${running?"disabled":""}>整章重写</button>`:""}
+ <h3>多模型对比</h3>
+ <p class="hint" style="margin-bottom:8px">同样的前文和细纲，几个模型同时写第 ${cur} 章，并排看，选一版采用。</p>
+ <label class="f" style="margin:0">模型（一行一个，2～4 个）<textarea id="cmpm" rows="3">${esc(S.compare_models.join("\n"))}</textarea></label>
+ <button class="btn" id="cmp" ${running?"disabled":""}>对比生成第 ${cur} 章</button>
+ ${S.compared.includes(cur)||(running&&S.job.name==="compare"&&S.job.chapter===cur)?`<button class="btn link" id="cmpview">${running&&S.job.name==="compare"?"查看对比进度":"查看已有的对比"}</button>`:""}
+ <h3>完成</h3>
+ ${S.config.step==="done"?`<p class="hint">已导出。之后再改章节，重新点一次导出即可。</p>`:`<p class="hint">全部章节写完后导出成稿：保留的原作（含补的伏笔）加续写正文。</p>`}
+ <button class="btn ${all?"primary":""}" id="fin" ${all&&!writing?"":"disabled"}>确认全文，导出</button>
+ ${S.config.step==="done"?`<a class="btn" href="/api/p/${pid}/manuscript" style="text-decoration:none;color:inherit">下载成稿 TXT</a>`:""}`;
+ $("#stop")&&($("#stop").onclick=()=>act(async()=>{await api("POST",`/api/p/${pid}/stop`,{});await poll()}));
+ $("#cont")&&($("#cont").onclick=()=>act(async()=>{await api("POST",`/api/p/${pid}/write`,{models:readModels()});await load()}));
+ $("#save")&&($("#save").onclick=()=>act(async()=>{await saveChapter();render();toast("已保存")}));
+ $("#instr")&&($("#instr").oninput=e=>instr=e.target.value);
+ $("#rev")&&($("#rev").onclick=()=>act(async()=>{if(chDirty)await saveChapter();chData=null;await api("POST",`/api/p/${pid}/revise`,{chapter:cur,instruction:instr,models:readModels()});await load()}));
+ $("#restore")&&($("#restore").onclick=()=>act(async()=>{await api("POST",`/api/p/${pid}/restore`,{chapter:cur});chData=null;await load();toast("已恢复")}));
+ $("#rw")&&($("#rw").onclick=()=>act(async()=>{if(!confirm("重写会覆盖这一章（包括你的修改），继续吗？"))return;chDirty=false;chData=null;await api("POST",`/api/p/${pid}/rewrite`,{chapter:cur,models:readModels()});await load()}));
+ $("#cmp").onclick=()=>act(async()=>{
+  const models=$("#cmpm").value.split("\n").map(s=>s.trim()).filter(Boolean);
+  if(S.compared.includes(cur)&&!confirm("会覆盖这一章已有的对比结果，继续吗？"))return;
+  if(chDirty)await saveChapter();
+  await api("POST",`/api/p/${pid}/compare`,{chapter:cur,models});cmp=null;cmpOpen=true;await loadCmp();await load()});
+ $("#cmpview")&&($("#cmpview").onclick=()=>act(async()=>{await loadCmp();cmpOpen=true;render()}));
+ $("#fin").onclick=()=>act(async()=>{if(chDirty)await saveChapter();await api("POST",`/api/p/${pid}/finish`,{});await load();location.href=`/api/p/${pid}/manuscript`});
+}
+
+document.addEventListener("change",e=>{if(e.target.id==="movemode"&&S)act(async()=>{S.config=await api("PUT",`/api/p/${pid}/config`,{move_mode:e.target.value})})});
+// 模型改了就存
+document.addEventListener("change",e=>{if(e.target.matches("[data-model]")&&S)act(saveModels)});
+document.addEventListener("keydown",e=>{if((e.metaKey||e.ctrlKey)&&e.key==="s"){e.preventDefault();
+ if(view==="writing"&&chDirty)act(async()=>{await saveChapter();render();toast("已保存")});
+ if(view==="detail"&&detailDirty)$("#save")?.click()}});
+window.addEventListener("beforeunload",e=>{if(chDirty||detailDirty){e.preventDefault();e.returnValue=""}});
+boot().catch(e=>toast(e.message));
+</script>
+</body>
+</html>

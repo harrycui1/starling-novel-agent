@@ -1,0 +1,15 @@
+{
+ "stage": "编辑介入① 选方向",
+ "mode": "演示：按默认规则自动选择",
+ "rule": "默认选 steady，没有则选第一个",
+ "selected": "steady",
+ "editor_note": "无",
+ "reject_reasons_options": [
+  "类型跑偏",
+  "切点不对",
+  "新冲突生硬",
+  "不够爽",
+  "高光降级",
+  "原文理解有误"
+ ]
+}

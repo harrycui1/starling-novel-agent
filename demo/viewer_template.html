@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>续写 Agent 演示</title>
+<style>
+:root{--bg:#f6f4ef;--paper:#fffdf8;--ink:#1f1d1a;--ink2:#57534c;--ink3:#8f8a80;--line:#e6e1d6;--soft:#efebe2;--accent:#b4432c;--warn:#b7791f;--warn-soft:#fbf0d9;
+ --serif:"Songti SC","Noto Serif SC",serif;--sans:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+@media (prefers-color-scheme:dark){:root{--bg:#161513;--paper:#1e1c19;--ink:#ece8df;--ink2:#b5afa3;--ink3:#7d786e;--line:#2f2c27;--soft:#26241f;--accent:#e07a5f;--warn:#e0a84a;--warn-soft:#352a17}}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.7 var(--sans);display:flex;flex-direction:column}
+.muted{color:var(--ink3)}
+.top{flex:none;background:var(--paper);border-bottom:1px solid var(--line)}
+.in{max-width:1100px;margin:0 auto;padding:0 32px}
+.top .bar{padding-top:14px;display:flex;gap:16px;align-items:baseline}
+.top .bar b{font:600 16px var(--serif)}
+.top .bar span{font-size:13px;color:var(--ink3)}
+nav{display:flex;margin-top:10px}
+nav button{flex:1;border:0;border-bottom:2px solid transparent;background:none;font:inherit;font-size:14px;color:var(--ink3);cursor:pointer;padding:6px 0 10px;text-align:left}
+nav button small{display:block;font-size:11px}
+nav button:hover{color:var(--ink)}
+nav button.on{color:var(--ink);border-color:var(--ink);font-weight:600}
+.stage{flex:1;overflow:auto}
+.page{padding-top:36px;padding-bottom:48px}
+h1{font:600 28px/1.3 var(--serif);margin:0 0 8px}
+.what{font-size:16px;color:var(--ink2);max-width:46em;margin:0 0 6px}
+.io{font-size:14px;color:var(--ink3);margin:0 0 32px}
+h3{font-size:14px;font-weight:600;color:var(--ink2);margin:32px 0 10px}
+dl.kv{display:grid;grid-template-columns:140px 1fr;gap:10px 20px;margin:0}
+dl.kv dt{color:var(--ink3)}dl.kv dd{margin:0}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;vertical-align:top;padding:9px 16px 9px 0;border-bottom:1px solid var(--line)}
+th{font-weight:500;color:var(--ink3);font-size:13px;white-space:nowrap}
+td.n{white-space:nowrap;color:var(--ink3)}
+tr.dim td{color:var(--ink3)}
+details{margin-top:28px}
+summary{cursor:pointer;color:var(--ink3);font-size:14px}
+summary:hover{color:var(--accent)}
+pre{background:var(--soft);border-radius:8px;padding:12px;font:12px/1.6 ui-monospace,Menlo,monospace;white-space:pre-wrap;word-break:break-word;max-height:60vh;overflow:auto}
+.checks{margin-top:32px;padding-top:16px;border-top:1px solid var(--line);font-size:14px}
+.checks .bad{color:var(--warn)}
+.checks ul{list-style:none;margin:6px 0 0;padding:0}
+/* 方向 */
+.dirs{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.dir{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:20px}
+.dir.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.dir .kind{font-size:13px;color:var(--ink3);display:flex;justify-content:space-between}
+.dir.sel .kind b{color:var(--accent)}
+.dir h4{font:600 19px/1.4 var(--serif);margin:6px 0 8px}
+.dir p{color:var(--ink2);margin:0 0 14px}
+.dir dl{display:grid;grid-template-columns:52px 1fr;gap:6px 10px;margin:0;font-size:14px;border-top:1px solid var(--line);padding-top:12px}
+.dir dt{color:var(--ink3)}.dir dd{margin:0}
+.dir .bad{margin-top:12px;font-size:13px;color:var(--warn)}
+/* 伏笔、正文 */
+.ctx{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:20px 24px;font:16px/1.9 var(--serif);white-space:pre-line;margin-bottom:12px}
+mark{background:var(--warn-soft);color:inherit;border-bottom:2px solid var(--warn)}
+.reader{display:grid;grid-template-columns:180px 1fr;gap:32px;align-items:start}
+.toc{position:sticky;top:0;font-size:14px}
+.toc .g{font-size:12px;color:var(--ink3);margin:12px 0 4px}
+.toc button{display:block;width:100%;border:0;background:none;color:var(--ink2);font:inherit;text-align:left;padding:4px 10px;border-radius:6px;cursor:pointer}
+.toc button:hover{background:var(--soft)}
+.toc button.on{background:var(--ink);color:var(--paper)}
+.toc button[disabled]{opacity:.4;cursor:default;background:none}
+.sheet{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:40px 52px}
+.sheet .meta{font-size:13px;color:var(--ink3);margin-bottom:24px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.sheet .meta .bad{color:var(--warn)}
+.prose{font:17px/2 var(--serif);max-width:34em}
+.prose p{margin:0 0 .9em}
+.foot{flex:none;border-top:1px solid var(--line);background:var(--paper)}
+.foot .in{display:flex;justify-content:space-between;padding-top:10px;padding-bottom:10px}
+.foot button{border:0;background:none;font:inherit;font-size:14px;color:var(--ink2);cursor:pointer}
+.foot button:hover{color:var(--accent)}
+.foot button[disabled]{visibility:hidden}
+</style>
+</head>
+<body>
+<div class="top"><div class="in"><div class="bar"><b id="book"></b><span id="summary"></span></div><nav id="nav"></nav></div></div>
+<div class="stage" id="stage"><div class="in page" id="page"></div></div>
+<div class="foot"><div class="in"><button id="prev"></button><button id="next"></button></div></div>
+<script>
+const D=/*__DATA__*/null;
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const N=x=>Number(x)||0;
+const pct=x=>Math.round(N(x)*100)+"%";
+const KIND={payoff:"爽点",emotion:"情感",twist:"反转",loose_villain:"反派没受到惩罚",unfulfilled_threat:"放过的狠话没兑现",unused_setup:"设定没用上",undeveloped_character:"人物没展开",protagonist_weakness:"主角的软肋",keep:"保留",delay:"挪后",amplify:"加码",replace:"替换",steady:"稳妥",deepen:"深挖",alternate:"换路"};
+const k=x=>KIND[x]||x||"";
+const paras=t=>String(t||"").split(/\n+/).map(s=>s.trim()).filter(Boolean);
+
+const s0=D.s0_input||{},base=s0.baseline||{},cfg=s0.config||{};
+const U=D.s1_understand?.output||{},G=U.genre_contract||{};
+const dirs=D.s2_directions?.output?.directions||[];
+const selKey=D.gate1?.selected,sel=dirs.find(d=>d.strategy===selKey)||{};
+const plan=D.s3_outline?.plan||{},cut=N(plan.cut_after_chapter||sel.cut_after_chapter);
+const outline=D.s3_outline?.output||{},detail=D.s4_detail?.output?.chapters||[];
+const written=D.s5b||[],origN=(base.chapters||[]).length,nNew=N(plan.n_chapters)||detail.length;
+
+const page=(title,what,io,body,rec,checks)=>`<h1>${title}</h1><p class="what">${what}</p><p class="io">输入：${io[0]}　→　输出：${io[1]}</p>${body}${checkList(checks??rec?.checks)}${raw(rec)}`;
+function checkList(c){if(!c||!c.length)return "";const bad=c.filter(x=>!x.pass);
+ return `<div class="checks">代码检查 ${c.length-bad.length}/${c.length} 通过${bad.length?`<ul>${bad.map(x=>`<li class="bad">✗ ${esc(x.name)}</li>`).join("")}</ul>`:""}</div>`}
+function raw(r){if(!r||!r.prompt)return "";return `<details><summary>Prompt 与模型原始输出（${esc(r.model)}，${Math.round(N(r.seconds))} 秒）</summary><h3>Prompt</h3><pre>${esc(r.prompt)}</pre><h3>原始输出</h3><pre>${esc(r.raw)}</pre></details>`}
+
+const P=[
+{name:"原文理解",s:"S1",render(){
+ const r=D.s1_understand;
+ const hi=(U.highlights||[]).map(h=>`<tr class="${N(h.chapter)>cut?"dim":""}"><td class="n">第 ${N(h.chapter)} 章</td><td>${esc(h.content)}</td><td class="n">${esc(k(h.kind))}</td></tr>`).join("");
+ const th=(U.potentials||[]).map(p=>`<tr><td class="n">${esc(k(p.kind))}</td><td>${esc(p.content)}${p.id===sel.potential_used?`<span class="muted">　← 续写用了这条</span>`:""}</td><td class="n">第 ${N(p.evidence_chapter)} 章</td></tr>`).join("");
+ return page("原文理解","读完原作全文，总结出续写时要遵守的东西和能用的素材。",[`原作全文 ${origN} 章`,"类型、高光、没收尾的线索、人物、原句"],`
+ <dl class="kv"><dt>类型</dt><dd>${esc(G.genre)}</dd><dt>读者追这本书是为了</dt><dd>${esc(G.core_emotion)}</dd><dt>读者期待的反派下场</dt><dd>${esc(G.villain_fate_expected)}</dd><dt>不能写成</dt><dd>${(G.forbidden_drifts||[]).map(esc).join("；")}</dd><dt>主线收完的章</dt><dd>第 ${N(U.door_closed_after?.chapter)} 章：${esc(U.door_closed_after?.reason)}</dd></dl>
+ <h3>原作高光</h3><table>${hi}</table>
+ <h3>原作里没收尾的线索（续写的新冲突从这里来）</h3><table>${th}</table>
+ <h3>人物</h3><table>${(U.characters||[]).map(c=>`<tr><td class="n">${esc(c.name)}</td><td>${esc(c.role)}</td><td>${(c.traits||[]).map(t=>esc(t.trait)).join("；")}</td></tr>`).join("")}</table>
+ <h3>原句摘录（写正文时用来对齐语气）</h3><table>${(U.tone_anchors||[]).map(a=>`<tr><td class="n">第 ${N(a.chapter)} 章</td><td>“${esc(a.quote)}”</td></tr>`).join("")}</table>`,r)}},
+{name:"方向生成",s:"S2",render(){
+ const c=D.s2_directions?.checks||[];
+ const card=d=>{const bad=c.filter(x=>!x.pass&&x.name.startsWith(`[${d.strategy}]`));
+  return `<div class="dir ${d.strategy===selKey?"sel":""}"><div class="kind"><span>${esc(k(d.strategy))}</span>${d.strategy===selKey?"<b>已选</b>":""}</div><h4>${esc(d.title)}</h4><p>${esc(d.logline)}</p>
+  <dl><dt>保留</dt><dd>原作前 ${N(d.cut_after_chapter)} 章（${pct(d.kept_ratio)}）</dd><dt>新冲突</dt><dd>${esc(d.second_conflict)}</dd><dt>结局</dt><dd>${esc(d.final_highlight)}</dd></dl>
+  ${bad.length?`<div class="bad">${bad.map(x=>`✗ ${esc(x.name.replace(/^\[\w+\]\s*/,""))}`).join("<br>")}</div>`:""}</div>`};
+ return page("方向生成",`出三个续写方向：保留原作到第几章、后面写什么新冲突、怎么结局。编辑选一个（演示里自动选了「${esc(k(selKey))}」）。`,["原文理解 + 原作全文",`三个方向`],
+ `<div class="dirs">${dirs.map(card).join("")}</div>
+ <h3>选中方向里，被删掉的原作高光怎么处理</h3><table>${(sel.highlight_ledger||[]).map(x=>`<tr><td class="n">${esc(x.highlight_id)}</td><td class="n">${esc(k(x.treatment))}</td><td>${esc(x.how)}</td></tr>`).join("")}</table>`,D.s2_directions,[])}},
+{name:"大纲生成",s:"S3",render(){
+ const cl=outline.climaxes||[];
+ const rows=(outline.big_events||[]).map(b=>{const cs=(b.chapters||[]).map(N),a=Math.min(...cs),z=Math.max(...cs);
+  const h=cl.filter(c=>N(c.chapter)>=a&&N(c.chapter)<=z).map(c=>`<br><span class="muted">${esc(c.level)}（第 ${N(c.chapter)} 章）：${esc(c.content)}</span>`).join("");
+  return `<tr><td class="n">第 ${a}${z>a?`–${z}`:""} 章</td><td><b>${esc(b.name)}</b><br>${(b.small_events||[]).map(esc).join(" → ")}${h}</td></tr>`}).join("");
+ return page("大纲生成",`把选中的方向拆成 ${nNew} 章的大事件，定好高潮放在哪。`,[`方向「${esc(sel.title)}」`,`${(outline.big_events||[]).length} 个大事件`],`<table>${rows}</table>`,D.s3_outline)}},
+{name:"细纲生成",s:"S4",render(){
+ const rows=detail.map(c=>`<tr><td class="n">第 ${N(c.index)} 章</td><td><b>${esc(c.title)}</b>　<span class="muted">${(c.events||[]).length} 个事件</span><br>${esc(c.core_conflict)}<br><span class="muted">章尾：${esc(c.ending_hook?.content)}</span></td></tr>`).join("");
+ return page("细纲生成",`给每一章定写什么、在哪收尾。每章事件数参照原作（平均 ${U.derived?.events_per_chapter} 个）。编辑在这里逐章确认（演示里自动确认）。`,["大纲",`${detail.length} 章细纲`],`<table>${rows}</table>`,D.s4_detail)}},
+{name:"伏笔回填",s:"S5a",render(){
+ const r=D.s5a_backfill||{},kt=r.kept_text||{};
+ const items=(r.applied||[]).map(a=>{const t=kt[a.chapter]||"",i=a.applied?t.indexOf(a.insert_text):-1;
+  return `<div class="muted" style="font-size:13px;margin-bottom:6px">第 ${N(a.chapter)} 章${a.applied?"":"（没找到插入位置，未插入）"}</div><div class="ctx">${i<0?esc(a.anchor):"…"+esc(t.slice(Math.max(0,i-120),i))+`<mark>${esc(a.insert_text)}</mark>`+esc(t.slice(i+a.insert_text.length,i+a.insert_text.length+80))+"…"}</div>`}).join("");
+ return page("伏笔回填",`续写里新出现的东西，在保留的原文里先补一句暗示（标黄的是补的）。只补在免费的前 ${N(cfg.free_chapters)} 章之后，原文其他地方不动。`,["选中方向的伏笔清单 + 保留的原文","补好伏笔的原文"],r.skipped?`<p class="muted">${esc(r.skipped)}</p>`:items,r)}},
+{name:"正文生成",s:"S5b",render(){
+ const ws=new Set(written.map(c=>N(c.outline?.index)));
+ const btn=(p,i)=>`<button data-ch="${i}" class="${i===cur?"on":""}">第 ${p.i} 章${p.orig?"":" "+esc(p.c.outline?.title||"")}</button>`;
+ let toc=`<div class="g">保留的原作</div>`+chs.map((p,i)=>p.orig?btn(p,i):"").join("")+`<div class="g">续写</div>`+chs.map((p,i)=>p.orig?"":btn(p,i)).join("");
+ toc+=detail.filter(c=>!ws.has(N(c.index))).map(c=>`<button disabled>第 ${N(c.index)} 章 ${esc(c.title)}</button>`).join("");
+ const p=chs[cur];
+ return page("正文生成",`按细纲一章一章写，已写 ${written.length} / ${nNew} 章。每章写完由代码对比字数、对话占比、段落长度是否接近原作。`,["保留的原文 + 已写的前几章 + 本章细纲","每章正文"],
+ `<div class="reader"><div class="toc">${toc}</div><div class="sheet">${sheet(p)}</div></div>`,p&&!p.orig?p.c:null,p&&!p.orig?p.c.checks:[])}},
+];
+
+const kept=D.s5a_backfill?.kept_text||{},inserts=(D.s5a_backfill?.applied||[]).filter(a=>a.applied);
+const chs=[...Object.keys(kept).map(N).sort((a,b)=>a-b).map(i=>({i,orig:true,text:kept[i]})),...written.map(c=>({i:N(c.outline?.index),orig:false,text:c.text,c}))];
+let cur=Math.max(0,chs.findIndex(p=>!p.orig));
+function sheet(p){if(!p)return "";
+ const body=paras(p.text).map(s=>{let h=esc(s);inserts.filter(a=>N(a.chapter)===p.i).forEach(a=>h=h.replace(esc(a.insert_text),`<mark>${esc(a.insert_text)}</mark>`));return `<p>${h}</p>`}).join("");
+ const s=p.c?.stats||{};
+ const meta=p.orig?`原作第 ${p.i} 章`:`续写第 ${p.i} 章 · ${N(s.words)} 字（原作每章约 ${N(base.median_words)}）· 对话 ${pct(s.dialogue_ratio)}（原作 ${pct(base.dialogue_ratio)}）`;
+ return `<div class="meta">${meta}</div><div class="prose">${body}</div>`}
+
+let at=0;
+function go(i,keep){at=Math.max(0,Math.min(P.length-1,i));
+ document.getElementById("nav").innerHTML=P.map((p,j)=>`<button data-go="${j}" class="${j===at?"on":""}"><small>${p.s}</small>${p.name}</button>`).join("");
+ document.getElementById("page").innerHTML=P[at].render();
+ const pv=document.getElementById("prev"),nx=document.getElementById("next");
+ pv.disabled=!at;nx.disabled=at===P.length-1;pv.textContent=at?`← ${P[at-1].name}`:"";nx.textContent=at<P.length-1?`${P[at+1].name} →`:"";
+ if(!keep)document.getElementById("stage").scrollTop=0}
+document.addEventListener("click",e=>{const g=e.target.closest("[data-go]");if(g)return go(N(g.dataset.go));const c=e.target.closest("[data-ch]");if(c){cur=N(c.dataset.ch);go(at,true)}});
+document.getElementById("prev").onclick=()=>go(at-1);document.getElementById("next").onclick=()=>go(at+1);
+document.addEventListener("keydown",e=>{if(e.metaKey||e.ctrlKey||e.altKey)return;if(e.key==="ArrowRight")go(at+1);if(e.key==="ArrowLeft")go(at-1)});
+document.getElementById("book").textContent=s0.title||"";
+document.getElementById("summary").textContent=`原作 ${origN} 章，保留前 ${cut} 章，续写 ${nNew} 章（已写 ${written.length} 章）`;
+go(0);
+</script>
+</body>
+</html>
